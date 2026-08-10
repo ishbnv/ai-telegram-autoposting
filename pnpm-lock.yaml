@@ -397,9 +397,6 @@ importers:
       react-dom:
         specifier: ^19.2.8
         version: 19.2.8(react@19.2.8)
-      shadcn:
-        specifier: ^4.16.2
-        version: 4.16.2(typescript@6.0.3)
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -443,6 +440,9 @@ importers:
       globals:
         specifier: ^17
         version: 17.6.0
+      shadcn:
+        specifier: ^4.16.2
+        version: 4.16.2(typescript@6.0.3)
       tailwindcss:
         specifier: ^4
         version: 4.3.0
