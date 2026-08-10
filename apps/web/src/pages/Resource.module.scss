@@ -1,0 +1,68 @@
+// Shared by the five list-plus-dialog pages: Channels, Sources, Prompts,
+// Pipelines and Proxies.
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: $radius-panel;
+
+  // The container draws the outer edge, so the last row must not draw one too.
+  :global(tbody tr:last-child) {
+    border-bottom: 0;
+  }
+}
+
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: $space-2;
+}
+
+.subtle {
+  font-size: $text-xs;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+
+.stack {
+  display: flex;
+  // Without a ceiling, one long system prompt or URL widens the whole table and
+  // pushes the action buttons out of view.
+  max-width: 320px;
+  flex-direction: column;
+  gap: $space-1;
+
+  .subtle {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: $text-sm;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: $space-3;
+}
+
+.sourceList {
+  display: flex;
+  max-height: 192px;
+  flex-direction: column;
+  gap: $space-2;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: $radius-surface;
+  padding: $space-3;
+}
+
+.error {
+  padding-bottom: $space-4;
+  font-size: $text-sm;
+  color: var(--destructive);
+}

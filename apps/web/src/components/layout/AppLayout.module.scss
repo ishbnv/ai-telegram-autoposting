@@ -1,0 +1,29 @@
+.shell {
+  display: flex;
+  min-height: 100svh;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.content {
+  width: 100%;
+  max-width: $content-max;
+  flex: 1;
+  min-width: 0;
+  padding: $space-8 $space-8 $space-12;
+}
+
+@media (max-width: $bp-mobile) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .content {
+    padding: $space-4 $space-4 $space-8;
+  }
+}

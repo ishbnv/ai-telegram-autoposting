@@ -1,0 +1,118 @@
+.processes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-2;
+  padding-bottom: $space-5;
+}
+
+.process {
+  display: flex;
+  align-items: center;
+  gap: $space-2;
+  border: 1px solid var(--border);
+  border-radius: $radius-surface;
+  padding: $space-2 $space-3;
+  font-size: $text-sm;
+}
+
+.dot {
+  width: $space-2;
+  height: $space-2;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background-color: var(--muted-foreground);
+}
+
+.dotHealthy {
+  background-color: oklch(0.72 0.19 149);
+}
+
+.dotStale {
+  background-color: var(--destructive);
+}
+
+.stats {
+  display: grid;
+  gap: $space-3;
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+  padding-bottom: $space-6;
+}
+
+.stat {
+  border: 1px solid var(--border);
+  border-radius: $radius-panel;
+  padding: $space-4;
+}
+
+.statLabel {
+  font-size: $text-xs;
+  color: var(--muted-foreground);
+}
+
+.statValue {
+  font-family: var(--font-heading);
+  font-size: $text-2xl;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  padding-top: $space-1;
+}
+
+.statHint {
+  font-size: $text-xs;
+  color: var(--muted-foreground);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: $space-2;
+  padding: $space-4 0;
+}
+
+.search {
+  width: min(352px, 100%);
+}
+
+.title {
+  display: flex;
+  // Keeps a long headline or post body from widening the table past the viewport.
+  max-width: 544px;
+  flex-direction: column;
+  gap: $space-1;
+}
+
+.subtle {
+  font-size: $text-xs;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: $space-2;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $space-4;
+  padding-top: $space-4;
+  font-size: $text-sm;
+  color: var(--muted-foreground);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: $radius-panel;
+
+  :global(tbody tr:last-child) {
+    border-bottom: 0;
+  }
+}
