@@ -157,3 +157,32 @@ describe("settings", () => {
     expect(body).not.toContain("s".repeat(32))
   })
 })
+
+/**
+ * Last on purpose: the guard is process-wide, so tripping it would lock out
+ * every test that ran after this one.
+ */
+describe("login rate limiting", () => {
+  const guess = () =>
+    app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: "wrong" }),
+    })
+
+  it("stops answering after repeated failures and says when to return", async () => {
+    let last = await guess()
+
+    // The unit tests cover the limits themselves; this only proves the route
+    // consults the guard and reports the refusal properly.
+    for (let attempt = 0; attempt < 10 && last.status !== 429; attempt += 1) {
+      last = await guess()
+    }
+
+    expect(last.status).toBe(429)
+    expect(Number(last.headers.get("Retry-After"))).toBeGreaterThan(0)
+    await expect(last.json()).resolves.toMatchObject({
+      error: { message: expect.stringContaining("Too many attempts") },
+    })
+  })
+})

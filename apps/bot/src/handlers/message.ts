@@ -3,6 +3,7 @@ import { updateModerationCard, type TelegramMessage } from "@core"
 import type { BotContext } from "@/context"
 import { allowedChats, isAllowed } from "@/lib/allowlist"
 import { parseEditPrompt } from "@/lib/editPrompt"
+import { moderatesPost } from "@/lib/moderates"
 
 /** Matches the limit the API puts on a manual edit. */
 const MAX_TEXT_LENGTH = 8_000
@@ -26,14 +27,28 @@ export async function handleMessage(
     return
   }
 
-  const postId = parseEditPrompt(message.reply_to_message?.text)
+  const repliedTo = message.reply_to_message
+  const postId = parseEditPrompt(repliedTo?.text)
   if (!postId) {
+    return
+  }
+
+  /**
+   * The marker alone is not proof: a user can type `[post:<id>]` at the end of
+   * their own message and reply to it, which would let anyone in the chat
+   * rewrite any pending draft. Only a reply to a message this bot sent counts.
+   */
+  if (repliedTo?.from?.id !== ctx.botId) {
+    ctx.logger.warn(
+      { postId, author: repliedTo?.from?.id },
+      "edit reply pointed at a message the bot did not write"
+    )
     return
   }
 
   if (!isAllowed(await allowedChats(ctx), message.chat.id)) {
     ctx.logger.warn(
-      { chatId: message.chat.id },
+      { chatType: message.chat.type },
       "edit reply from a chat that is not a moderation chat"
     )
     return
@@ -56,6 +71,17 @@ export async function handleMessage(
 
   if (!post) {
     await reply("That post no longer exists.")
+    return
+  }
+
+  // Being in *a* moderation chat is not the same as being in *this post's*.
+  // Without this, one channel's moderators could rewrite another's drafts.
+  if (!moderatesPost(message.chat.id, post)) {
+    ctx.logger.warn(
+      { postId },
+      "edit reply came from a chat that does not moderate this post"
+    )
+    await reply("This draft is moderated in a different chat.")
     return
   }
 

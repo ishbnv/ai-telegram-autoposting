@@ -10,4 +10,6 @@ export type BotContext = {
   telegram: TelegramClient
   logger: Logger
   env: BotEnv
+  /** From getMe at boot. Used to tell our own messages from a user's. */
+  botId: number
 }

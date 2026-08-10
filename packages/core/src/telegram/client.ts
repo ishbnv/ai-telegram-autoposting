@@ -39,6 +39,9 @@ const messageSchema = z.object({
     .object({
       message_id: z.number(),
       text: z.string().optional(),
+      // Required to tell one of our own prompts from a message a user wrote to
+      // look like one. Without it, authorship cannot be checked at all.
+      from: userSchema.optional(),
     })
     .optional(),
 })

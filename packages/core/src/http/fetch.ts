@@ -16,12 +16,24 @@ const RETRYABLE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
 /** Keep failure bodies out of the logs beyond what is useful for diagnosis. */
 const MAX_ERROR_BODY_CHARS = 500
 
+/**
+ * Methods where a retry cannot create a second side effect, so replaying one
+ * whose response we never saw is safe.
+ */
+const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "OPTIONS", "PUT", "DELETE"])
+
 export type HttpRequestOptions = {
   timeoutMs?: number
   /** Number of *additional* attempts after the first one. */
   retries?: number
   proxyUrl?: string
   signal?: AbortSignal
+  /**
+   * Allows retries on a non-idempotent method. Off by default and it should
+   * stay off for anything that sends a message or spends money: a timeout tells
+   * us the response was lost, not that the server ignored the request.
+   */
+  retryNonIdempotent?: boolean
 }
 
 export class HttpError extends Error {
@@ -105,7 +117,28 @@ export async function httpRequest(
     retries = DEFAULT_RETRIES,
     proxyUrl,
     signal,
+    retryNonIdempotent = false,
   } = options
+
+  const method = (init.method ?? "GET").toUpperCase()
+  const replayable = retryNonIdempotent || IDEMPOTENT_METHODS.has(method)
+
+  /**
+   * A POST that Telegram accepted but whose reply was lost is indistinguishable
+   * from one it never received, and the Bot API has no idempotency key — so
+   * replaying it puts a second copy in the channel. For those, only a status
+   * that *proves* the request was not acted on is worth retrying: 429 means
+   * "rate limited, I did not process this". A timeout, a socket error or a 502
+   * from an edge node prove nothing, because the backend may already have run
+   * the send.
+   */
+  const canRetry = (status: number | null): boolean => {
+    if (replayable) {
+      return status === null || RETRYABLE_STATUSES.has(status)
+    }
+
+    return status === 429
+  }
 
   let lastError: unknown
 
@@ -126,7 +159,7 @@ export async function httpRequest(
 
       const body = await response.text().catch(() => "")
 
-      if (!RETRYABLE_STATUSES.has(response.status) || attempt === retries) {
+      if (!canRetry(response.status) || attempt === retries) {
         throw new HttpError(response.status, url, body)
       }
 
@@ -139,7 +172,10 @@ export async function httpRequest(
         throw error
       }
 
-      if (error instanceof HttpError && !RETRYABLE_STATUSES.has(error.status)) {
+      // No response means we cannot tell whether the server acted on it.
+      const status = error instanceof HttpError ? error.status : null
+
+      if (!canRetry(status)) {
         throw error
       }
 

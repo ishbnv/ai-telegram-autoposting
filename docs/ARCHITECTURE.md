@@ -52,7 +52,17 @@ If the update matches zero rows the button was already handled, and the bot answ
 with a notice instead of acting twice. This is what makes a double tap safe — Telegram will happily
 deliver the same press twice on a flaky connection.
 
-The bot ignores updates from any chat that is not a known moderation chat.
+Two separate checks gate every button and every edit, and conflating them was a
+real bug:
+
+1. **Is this chat allowed to talk to the bot at all?** The allowlist — the
+   default moderation chat plus every channel's — answers this.
+2. **Does this chat moderate _this_ post?** `callback_data` is client-supplied,
+   so a modified client can name any post id. Without the second check, a
+   moderator of one channel could publish another channel's draft.
+
+An edit additionally has to be a reply to a message the bot itself sent. The
+marker in the prompt body is not proof of that: anyone can type it.
 
 ## Queue
 
@@ -61,14 +71,42 @@ deliberate choice not to run Redis: the workload is a handful of jobs per hour, 
 already there, and job state is visible in the same place as everything else. The queue sits behind
 a narrow interface, so moving to a broker later is a contained change rather than a rewrite.
 
+## Delivery is not transactional
+
+Telegram has no idempotency key, so "did this message go out?" cannot always be
+answered. The publish path therefore treats three outcomes differently:
+
+- **Telegram answered.** The post stays PUBLISHED even if recording it failed.
+  Releasing it here is what would put a second copy in the channel.
+- **Telegram refused with a 4xx.** It parsed the request and declined, which
+  proves nothing was sent, so the post goes back in the queue.
+- **Timeout or dropped connection.** Unknowable. The post is parked as FAILED
+  for a human to check the channel, because an automatic retry might duplicate.
+
+For the same reason the shared HTTP layer does not retry non-idempotent methods
+on transport errors or 5xx — only on 429, which is an explicit "I did not
+process this".
+
 ## Trust boundaries
 
-Two of them matter.
+Three of them matter.
+
+**The login endpoint is the only pre-auth surface.** It is rate limited per
+client, globally, and by the number of password verifications allowed to run at
+once. The last one is the important one: scrypt costs ~33 MB per attempt, so
+without a cap a flood of parallel logins is a memory amplifier that takes the
+API down with no correct password at all. Limits are checked before the key
+derivation runs, never after.
 
 **Source content is untrusted input to an LLM.** A Reddit post can contain text aimed at the model
 rather than at a reader. Fetched content is passed inside delimiters, and the system prompt tells
 the model to treat it as data. The approval step is the backstop: a prompt injection that gets past
 the model still has to get past a human looking at the card.
+
+Keeping content inside those delimiters means defusing the tag _name_ in fetched values, not
+deleting whole `<...>` tags. Deleting tags is one pass over the string, so the fragments either side
+of a removed match get joined — `<</source_material>/source_material>` survives it as a working
+close tag. Removing the name is linear and leaves nothing to rebuild a delimiter from.
 
 **Secrets never enter the database.** Bot token, OpenRouter key and the admin password hash are read
 from the environment. The Settings screen reports whether a value is present, never what it is. The

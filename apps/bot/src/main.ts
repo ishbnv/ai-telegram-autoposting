@@ -32,12 +32,17 @@ const telegram = new TelegramClient({
   ...(telegramProxyUrl ? { proxyUrl: telegramProxyUrl } : {}),
 })
 
+// Fail loudly at boot rather than silently polling with a bad token. The id is
+// also what lets the edit flow tell our own prompts from a user's imitation.
+const me = await telegram.getMe()
+
 const ctx: BotContext = {
   prisma,
   queue: new JobQueue(prisma, `bot:${instanceId}`),
   telegram,
   logger,
   env,
+  botId: me.id,
 }
 
 async function beat() {
@@ -52,8 +57,6 @@ async function beat() {
   }
 }
 
-// Fail loudly at boot rather than silently polling with a bad token.
-const me = await telegram.getMe()
 logger.info({ username: me.username, instanceId }, "bot started")
 
 const controller = new AbortController()

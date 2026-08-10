@@ -39,15 +39,25 @@ export function applyTemplate(
     .replaceAll("{content}", sanitize(values.content ?? ""))
 }
 
+/** What an occurrence of the tag name becomes. Must not contain the name. */
+const NEUTRALISED_TAG = "source-material"
+
 /**
- * Strips the delimiter itself out of untrusted values. Without this, a post
- * containing `</source_material>` could close the block early and have the rest
- * of its text read as instructions.
+ * Neutralises the delimiter inside untrusted values, so a fetched item cannot
+ * close the block early and have the rest of its text read as instructions.
+ *
+ * This defuses the *name*, not the whole `<...>` tag, and that distinction is
+ * the point. Deleting whole tags is a single pass over the input, so the
+ * fragments either side of a removed match get joined — feed
+ * `<</source_material>/source_material>` to a tag-deleting version and the
+ * leftovers spell a working close tag. Looping to a fixed point would fix that
+ * but is quadratic on hostile input. Removing the name once is linear and
+ * leaves nothing to rebuild from: a delimiter cannot exist without it.
  */
 function sanitize(value: string): string {
   return value.replaceAll(
-    new RegExp(`</?${SOURCE_MATERIAL_TAG}\\s*>`, "gi"),
-    ""
+    new RegExp(SOURCE_MATERIAL_TAG, "gi"),
+    NEUTRALISED_TAG
   )
 }
 

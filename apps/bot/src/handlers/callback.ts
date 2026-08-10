@@ -9,6 +9,7 @@ import type { Channel, Post, PostStatus } from "@db"
 import type { BotContext } from "@/context"
 import { buildEditPrompt } from "@/lib/editPrompt"
 import { allowedChats, isAllowed } from "@/lib/allowlist"
+import { moderatesPost } from "@/lib/moderates"
 
 /** A ForceReply prompt quoting the whole draft would hit Telegram's limit. */
 const PROMPT_DRAFT_LIMIT = 2_000
@@ -63,8 +64,23 @@ export async function handleCallback(
     return
   }
 
+  /**
+   * The allowlist above only established that this chat may talk to the bot.
+   * callback_data is client-supplied — a modified client can submit any post id
+   * — so without this, a moderator of one channel could publish another
+   * channel's draft, and the edit prompt would carry its text into their chat.
+   */
+  if (!moderatesPost(chatId, post)) {
+    ctx.logger.warn(
+      { postId: payload.postId, action: payload.action },
+      "callback came from a chat that does not moderate this post"
+    )
+    await answer("This post is moderated in a different chat")
+    return
+  }
+
   if (payload.action === "edit") {
-    await sendEditPrompt(ctx, post, chatId)
+    await sendEditPrompt(ctx, post)
     await answer("Reply with the new text")
     return
   }
@@ -146,11 +162,12 @@ async function closeCard(
 
 async function sendEditPrompt(
   ctx: BotContext,
-  post: LoadedPost,
-  chatId: number
+  post: LoadedPost
 ): Promise<void> {
+  // The post's own moderation chat, not the pressing one: the prompt quotes the
+  // draft, and it must not travel to a chat that is not moderating this post.
   await ctx.telegram.sendMessage(
-    chatId,
+    post.moderationChatId ?? post.channel.moderationChatId,
     buildEditPrompt(post.id, post.text.slice(0, PROMPT_DRAFT_LIMIT)),
     {
       // Plain text: the draft is quoted verbatim and may contain anything.
