@@ -1,0 +1,46 @@
+// Design tokens. Injected into every *.module.scss by vite.config.ts, so there
+// is no @use line to forget. See docs/DESIGN.md for the reasoning.
+
+// ---------------------------------------------------------------------------
+// Spacing — base unit is 4px. Every gap, padding and margin is a multiple.
+// ---------------------------------------------------------------------------
+$unit: 4px;
+
+$space-1: 4px;
+$space-2: 8px;
+$space-3: 12px;
+$space-4: 16px;
+$space-5: 20px;
+$space-6: 24px;
+$space-8: 32px;
+$space-10: 40px;
+$space-12: 48px;
+$space-16: 64px;
+
+// ---------------------------------------------------------------------------
+// Type scale. Line heights stay unitless so they scale with the font size.
+// ---------------------------------------------------------------------------
+$text-xs: 0.75rem;
+$text-sm: 0.8125rem;
+$text-base: 0.875rem;
+$text-lg: 1rem;
+$text-xl: 1.375rem;
+$text-2xl: 1.5rem;
+
+// ---------------------------------------------------------------------------
+// Radii come from the shadcn theme so our surfaces and the component library
+// round identically. Nothing in the app is square.
+// ---------------------------------------------------------------------------
+$radius-control: var(--radius-md);
+$radius-surface: var(--radius-lg);
+$radius-panel: var(--radius-xl);
+
+// ---------------------------------------------------------------------------
+// Desktop-first: layout is authored for the wide case, these are max-widths.
+// ---------------------------------------------------------------------------
+$bp-tablet: 1024px;
+$bp-mobile: 768px;
+
+// Fixed sizes that still have to sit on the grid.
+$sidebar-width: 240px;
+$content-max: 1440px;

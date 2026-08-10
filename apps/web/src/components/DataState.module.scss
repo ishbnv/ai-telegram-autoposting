@@ -1,0 +1,14 @@
+.skeletons {
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+
+.empty {
+  border: 1px dashed var(--border);
+  border-radius: $radius-panel;
+  padding: $space-10 $space-6;
+  text-align: center;
+  font-size: $text-base;
+  color: var(--muted-foreground);
+}

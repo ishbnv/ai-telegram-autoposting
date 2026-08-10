@@ -1,0 +1,33 @@
+.notice {
+  margin-bottom: $space-6;
+}
+
+.grid {
+  display: grid;
+  gap: $space-3;
+  grid-template-columns: repeat(auto-fit, minmax(256px, 1fr));
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: $space-3;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: $space-1;
+}
+
+.label {
+  font-size: $text-xs;
+  color: var(--muted-foreground);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: $text-sm;
+  overflow-wrap: anywhere;
+}

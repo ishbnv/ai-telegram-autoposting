@@ -1,0 +1,29 @@
+.screen {
+  display: flex;
+  min-height: 100svh;
+  align-items: center;
+  justify-content: center;
+  padding: $space-6;
+}
+
+.card {
+  width: 100%;
+  max-width: 360px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: $space-4;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+
+.error {
+  font-size: $text-sm;
+  color: var(--destructive);
+}

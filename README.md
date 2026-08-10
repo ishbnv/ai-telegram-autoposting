@@ -1,0 +1,158 @@
+# AI Telegram Autoposting
+
+Self-hosted autoposting for Telegram channels. It watches your content sources, drafts a post
+with the LLM of your choice through [OpenRouter](https://openrouter.ai), and sends the draft to a
+Telegram chat with approval buttons. Nothing reaches your channel until you tap **Publish**.
+
+> **Status:** under active development. The architecture is settled; features land stage by stage.
+
+## How it works
+
+```
+RSS / your site / Reddit
+        │  worker polls on a schedule, deduplicates
+        ▼
+    NewsItem  ──►  OpenRouter (your prompt, your model)
+                        │
+                        ▼
+              draft post + cost recorded
+                        │
+                        ▼
+   Telegram moderation chat:
+   post text + "🔗 Source: …" footer
+   [✅ Publish] [✏️ Edit] [♻️ Regenerate] [❌ Reject]
+                        │  you tap Publish
+                        ▼
+                 your channel
+```
+
+## Features
+
+- **Sources** — RSS/Atom, plain HTML pages via CSS selectors, and Reddit. Deduplicated per source.
+- **Prompts** — system prompt, model, temperature and token limits, picked from the live OpenRouter
+  model catalogue with current prices.
+- **Pipelines** — bind sources to a prompt and a channel, with keyword filters and a schedule.
+- **Approval in Telegram** — every draft arrives as a card with buttons. Edit the text by replying
+  to the card. There is no auto-publish path anywhere in the codebase.
+- **Source attribution** — each post carries a configurable footer linking back to where the
+  information came from.
+- **Cost tracking** — every LLM call is recorded with token counts and dollar cost.
+- **Proxies** — optional per-use proxies for LLM, source fetching, and Telegram.
+
+## Quick start
+
+Requirements: Docker. Node 22+ and pnpm as well if you want to work on the code.
+
+```bash
+git clone <your-fork-url> && cd ai-telegram-autoposting
+cp .env.example .env
+```
+
+Fill in the four values described below, then bring the whole thing up:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d --build
+```
+
+That builds one image and runs four services from it: Postgres, a one-shot `migrate` that applies
+pending migrations and exits, then the API, the worker and the bot. The admin panel is served by the
+API on <http://localhost:3000>.
+
+To work on the code instead, run Postgres in Docker and everything else on the host:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d postgres
+pnpm install
+pnpm db:migrate
+pnpm dev
+```
+
+In that mode the panel runs on <http://localhost:5173> with hot reload and proxies `/api` to the API
+on port 3000.
+
+Either way, `.env` needs four values first.
+
+### Admin password
+
+```bash
+pnpm --filter @workspace/api hash-password
+```
+
+Type your password at the prompt. The command prints a `scrypt$…` string — that is
+`ADMIN_PASSWORD_HASH`. The password is read from stdin rather than an argument, so it never lands
+in your shell history or in the process list.
+
+### Session secret
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
+
+Put the output in `SESSION_SECRET`. Anything shorter than 32 characters is rejected at startup.
+
+### Telegram bot and chat ids
+
+Create a bot with [@BotFather](https://t.me/BotFather) and put its token in `TELEGRAM_BOT_TOKEN`.
+
+For `TELEGRAM_MODERATION_CHAT_ID`, add the bot to the group you want to approve posts from, send
+`/start@your_bot` there, then ask the bot what it saw:
+
+```bash
+curl -s "https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates" | python3 -m json.tool
+```
+
+Look for `"chat": { "id": -400…, "type": "supergroup" }`. Group ids are negative.
+
+Two things that catch people out:
+
+- Bots have privacy mode on by default and only see messages addressed to them, which is why the
+  message above has to be a command mentioning the bot. A plain "hello" produces an empty result.
+- If a plain group is later upgraded to a supergroup, **its id changes** — `-400123456` becomes
+  `-100400123456` — and drafts silently stop arriving. Make the group a supergroup first (Settings →
+  Chat history for new members → Visible), then read its id.
+
+The channel id is found the same way: make the bot an administrator of the channel, post anything,
+forward that post to the bot in a direct message, and read `forward_from_chat.id` from `getUpdates`.
+That value goes into the **Channels** page in the panel, not into `.env`.
+
+## Configuration
+
+All configuration is read from the environment — see [`.env.example`](.env.example) for the full
+list. Secrets are never stored in the database and never shown in the UI.
+
+| Variable                      | What it is                                     |
+| ----------------------------- | ---------------------------------------------- |
+| `DATABASE_URL`                | Postgres connection string                     |
+| `TELEGRAM_BOT_TOKEN`          | Bot token from @BotFather                      |
+| `TELEGRAM_MODERATION_CHAT_ID` | Default chat that receives drafts for approval |
+| `OPENROUTER_API_KEY`          | OpenRouter API key                             |
+| `ADMIN_PASSWORD_HASH`         | scrypt hash of your admin panel password       |
+| `SESSION_SECRET`              | Random string signing the session cookie       |
+
+## Tech stack
+
+Hono · Prisma · Postgres · React · Vite · Zustand · shadcn/ui on Base UI · Tailwind · Turborepo.
+
+## Project layout
+
+| Path                 | What it is                                                                |
+| -------------------- | ------------------------------------------------------------------------- |
+| `apps/web`           | Admin panel (React + Vite + Zustand)                                      |
+| `apps/api`           | REST API (Hono), session auth, serves the built panel in production       |
+| `apps/worker`        | Source polling, LLM generation, publishing jobs                           |
+| `apps/bot`           | Telegram long polling, moderation buttons                                 |
+| `packages/ui`        | shadcn/ui components and theme                                            |
+| `packages/db`        | Prisma schema, migrations, client                                         |
+| `packages/core`      | Domain logic: source adapters, OpenRouter and Telegram clients, job queue |
+| `packages/contracts` | zod schemas shared between the API and the panel                          |
+| `packages/config`    | Environment parsing and logging                                           |
+
+Architecture notes live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Contributing
+
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE)

@@ -1,0 +1,72 @@
+// The model list is the one place where a select option carries two lines of
+// information, so it needs its own layout rather than the default single row.
+
+.modelItem {
+  padding-top: $space-2;
+  padding-bottom: $space-2;
+
+  // A hairline between entries, so a long list stays scannable. The last one
+  // would sit right on the popup edge.
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+.modelText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: $space-1;
+  white-space: normal;
+}
+
+.modelName {
+  font-size: $text-base;
+  line-height: 1.3;
+}
+
+.modelPrice {
+  font-size: $text-xs;
+  line-height: 1.3;
+  opacity: 0.6;
+}
+
+.modelPopup {
+  min-width: 320px;
+}
+
+.promptArea {
+  min-height: 176px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: $text-sm;
+}
+
+.templateArea {
+  min-height: 96px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: $text-sm;
+}
+
+.placeholders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: $space-2;
+}
+
+.placeholder {
+  border: 1px solid var(--border);
+  border-radius: $radius-control;
+  padding: $space-1 $space-2;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: $text-xs;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+
+  &:hover {
+    background-color: var(--accent);
+    color: var(--accent-foreground);
+  }
+}

@@ -1,0 +1,74 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: $space-5;
+}
+
+.fields {
+  display: flex;
+  // Tall enough that the common forms fit without scrolling, capped so the
+  // dialog never runs past the viewport on a laptop screen.
+  max-height: min(72svh, 640px);
+  flex-direction: column;
+  gap: $space-4;
+  overflow-y: auto;
+}
+
+/**
+ * Two-column body for dialogs that have a "what it writes" side and a
+ * "how it runs" side. Collapses to one column below the tablet breakpoint.
+ */
+.columns {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: $space-6;
+  // Stretch, not start: both columns take the height of the taller one, so a
+  // field marked `grow` can fill the leftover space instead of leaving a hole.
+  align-items: stretch;
+}
+
+.column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: $space-4;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: $space-2;
+}
+
+/** Takes the space the rest of the column does not use. */
+.fieldGrow {
+  flex: 1;
+  min-height: 0;
+
+  // The control inside it grows too, otherwise the field is tall and the input
+  // still sits at its own height with empty space underneath.
+  textarea {
+    flex: 1;
+  }
+}
+
+.hint {
+  font-size: $text-xs;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+.error {
+  border-radius: $radius-surface;
+  background-color: color-mix(in oklab, var(--destructive) 12%, transparent);
+  padding: $space-2 $space-3;
+  font-size: $text-sm;
+  color: var(--destructive);
+}
+
+@media (max-width: $bp-tablet) {
+  .columns {
+    grid-template-columns: 1fr;
+    gap: $space-4;
+  }
+}

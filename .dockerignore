@@ -1,0 +1,24 @@
+# Installed inside the image, never copied in — a host node_modules built on
+# macOS would poison a linux image.
+node_modules
+**/node_modules
+
+# Build output, regenerated in the image
+dist
+**/dist
+.turbo
+**/.turbo
+packages/db/src/generated
+
+# Never let real secrets into a layer
+.env
+.env.*
+!.env.example
+
+.git
+.github
+.idea
+.vscode
+docs
+*.md
+!README.md

@@ -1,0 +1,340 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Destinations
+// ---------------------------------------------------------------------------
+
+/// A Telegram channel we publish to, plus the chat where its drafts get approved.
+model Channel {
+  id       String  @id @default(cuid())
+  title    String
+  /// Telegram chat id of the channel, e.g. -1001234567890. Larger than int32, hence BigInt.
+  tgChatId BigInt  @unique
+  username String?
+  /// Chat that receives moderation cards for this channel. The bot must be a member.
+  moderationChatId BigInt
+  /// Appended under every published post. Placeholders: {sourceLink} renders the
+  /// source name as a hyperlink, {sourceName} and {sourceUrl} render plain text.
+  footerTemplate String  @default("🔗 Source: {sourceLink}")
+  isActive       Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pipelines    Pipeline[]
+  posts        Post[]
+  publications Publication[]
+}
+
+// ---------------------------------------------------------------------------
+// Inputs
+// ---------------------------------------------------------------------------
+
+/// Somewhere we pull raw items from: an RSS feed, a scraped page, or a subreddit.
+model Source {
+  id   String     @id @default(cuid())
+  type SourceType
+  name String
+  url  String
+  /// Adapter-specific settings: listing and subreddit for REDDIT, CSS selectors for HTML.
+  config           Json      @default("{}")
+  isActive         Boolean   @default(true)
+  fetchIntervalSec Int       @default(900)
+  lastFetchedAt    DateTime?
+  /// Last fetch failure, surfaced in the admin panel. Cleared on a successful fetch.
+  lastError        String?
+  proxyId          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proxy     Proxy?           @relation(fields: [proxyId], references: [id], onDelete: SetNull)
+  newsItems NewsItem[]
+  pipelines PipelineSource[]
+
+  @@index([isActive, lastFetchedAt])
+}
+
+/// One raw item fetched from a source, before any LLM is involved.
+model NewsItem {
+  id       String @id @default(cuid())
+  sourceId String
+  /// Stable identifier from the source (RSS guid, Reddit fullname, canonical URL).
+  /// Deduplication key — see the unique index below.
+  externalId  String
+  title       String
+  url         String
+  summary     String?
+  content     String?
+  imageUrl    String?
+  author      String?
+  publishedAt DateTime?
+  fetchedAt   DateTime       @default(now())
+  status      NewsItemStatus @default(NEW)
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  posts  Post[]
+
+  @@unique([sourceId, externalId])
+  @@index([status, publishedAt])
+  @@index([fetchedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Generation
+// ---------------------------------------------------------------------------
+
+/// How a news item is turned into a post: the instructions and the model.
+model Prompt {
+  id           String @id @default(cuid())
+  name         String @unique
+  systemPrompt String
+  /// Template for the user message. {title} {url} {summary} {content} are substituted.
+  userTemplate String @default("{title}\n\n{content}")
+  /// OpenRouter model slug, e.g. "anthropic/claude-sonnet-4.5".
+  model        String
+  temperature  Float?
+  maxTokens    Int?
+  isActive     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pipelines Pipeline[]
+  posts     Post[]
+}
+
+/// Binds sources to a prompt and a destination channel on a schedule.
+model Pipeline {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  promptId  String
+  channelId String
+  isActive  Boolean @default(true)
+  /// { include: string[], exclude: string[] } matched against title and summary.
+  filters   Json    @default("{}")
+  /// Cron expression controlling how often the pipeline looks for fresh items.
+  cron      String  @default("*/30 * * * *")
+  maxPostsPerDay    Int       @default(10)
+  /// Items older than this are ignored, so a first run does not post last
+  /// week's news. Deduplication itself is the unique index on
+  /// (pipelineId, newsItemId), which needs no window.
+  freshnessWindowHours Int    @default(48)
+  lastRunAt            DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  prompt  Prompt           @relation(fields: [promptId], references: [id], onDelete: Restrict)
+  channel Channel          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sources PipelineSource[]
+  posts   Post[]
+}
+
+model PipelineSource {
+  pipelineId String
+  sourceId   String
+
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  source   Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@id([pipelineId, sourceId])
+}
+
+// ---------------------------------------------------------------------------
+// Output
+// ---------------------------------------------------------------------------
+
+/// A generated post awaiting approval, or one that already went out.
+/// It only ever reaches a channel through an explicit moderation button press.
+model Post {
+  id         String     @id @default(cuid())
+  pipelineId String
+  /// Nullable so a post outlives the item it was written from. Deleting a
+  /// source used to cascade Source → NewsItem → Post → Publication and wipe the
+  /// record of everything ever published from it, while the messages stayed
+  /// live in the channel. `sourceName`/`sourceUrl` below are denormalised for
+  /// exactly this case.
+  newsItemId String?
+  channelId  String
+  promptId   String
+  /// Model actually used, copied from the prompt at generation time so later
+  /// edits to the prompt do not rewrite history.
+  model      String
+  status     PostStatus @default(GENERATING)
+  text       String     @default("")
+  mediaUrl   String?
+  /// Denormalised so the source footer survives if the news item is pruned.
+  sourceName String
+  sourceUrl  String
+
+  /// Where the moderation card lives, so the bot can edit it in place.
+  moderationChatId    BigInt?
+  moderationMessageId Int?
+
+  publishedAt DateTime?
+  error       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pipeline     Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  newsItem     NewsItem?     @relation(fields: [newsItemId], references: [id], onDelete: SetNull)
+  channel      Channel       @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  prompt       Prompt        @relation(fields: [promptId], references: [id], onDelete: Restrict)
+  publications Publication[]
+  llmCalls     LlmCall[]
+
+  /// One post per news item per pipeline. Regeneration rewrites this row rather
+  /// than creating a second draft for the same item.
+  @@unique([pipelineId, newsItemId])
+  @@index([status, createdAt])
+  @@index([createdAt])
+}
+
+/// The fact that a post was delivered to a channel, and where it landed.
+model Publication {
+  id          String   @id @default(cuid())
+  postId      String
+  channelId   String
+  tgMessageId Int
+  publishedAt DateTime @default(now())
+
+  post    Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, tgMessageId])
+  @@index([publishedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Operations
+// ---------------------------------------------------------------------------
+
+/// One call to OpenRouter, kept for the spend counters on the dashboard.
+model LlmCall {
+  id               String @id @default(cuid())
+  postId           String?
+  model            String
+  promptTokens     Int    @default(0)
+  completionTokens Int    @default(0)
+  /// USD as reported by OpenRouter, or derived from its price list.
+  costUsd          Decimal @default(0) @db.Decimal(12, 8)
+  latencyMs        Int     @default(0)
+  createdAt        DateTime @default(now())
+
+  post Post? @relation(fields: [postId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
+/// An outbound proxy. Unlike the bot token and API key, this is user-entered
+/// configuration rather than an application secret, so it lives here — but the
+/// API must never return the credentials portion of the URL to a client.
+model Proxy {
+  id       String     @id @default(cuid())
+  label    String     @unique
+  url      String
+  usedFor  ProxyUsage
+  isActive Boolean    @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sources Source[]
+}
+
+/// Work queue. Claimed with SELECT ... FOR UPDATE SKIP LOCKED; no broker needed.
+model Job {
+  id      String  @id @default(cuid())
+  type    JobType
+  payload Json    @default("{}")
+  /// Guards against enqueueing the same unit of work twice, e.g. "publish:<postId>".
+  dedupeKey   String?   @unique
+  status      JobStatus @default(PENDING)
+  runAt       DateTime  @default(now())
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  lockedAt    DateTime?
+  lockedBy    String?
+  lastError   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, runAt])
+}
+
+/// Liveness for the three long-running processes, read by the dashboard.
+model Heartbeat {
+  process    ProcessKind
+  instanceId String
+  lastSeenAt DateTime    @updatedAt
+  meta       Json        @default("{}")
+
+  @@id([process, instanceId])
+  @@index([lastSeenAt])
+}
+
+/// Non-secret runtime settings, e.g. timezone or default model. Secrets stay in env.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+
+enum SourceType {
+  RSS
+  HTML
+  REDDIT
+}
+
+enum NewsItemStatus {
+  NEW
+  TAKEN
+  SKIPPED
+}
+
+enum PostStatus {
+  GENERATING
+  PENDING_APPROVAL
+  APPROVED
+  PUBLISHED
+  REJECTED
+  FAILED
+}
+
+enum ProxyUsage {
+  LLM
+  SOURCE
+  TELEGRAM
+}
+
+enum JobType {
+  FETCH_SOURCE
+  RUN_PIPELINE
+  GENERATE_POST
+  PUBLISH_POST
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum ProcessKind {
+  API
+  WORKER
+  BOT
+}

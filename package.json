@@ -1,0 +1,33 @@
+{
+  "name": "ai-telegram-autoposting",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted AI autoposting for Telegram channels: collect from RSS/Reddit, draft with OpenRouter, approve in Telegram, publish.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "turbo typecheck lint test && pnpm format:check",
+    "db:generate": "pnpm --filter @workspace/db run generate",
+    "db:migrate": "pnpm --filter @workspace/db run migrate",
+    "db:deploy": "pnpm --filter @workspace/db run deploy",
+    "db:reset": "pnpm --filter @workspace/db run reset",
+    "db:seed": "pnpm --filter @workspace/db run seed",
+    "db:studio": "pnpm --filter @workspace/db run studio"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "turbo": "^2.9.18",
+    "typescript": "~6"
+  },
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22"
+  }
+}

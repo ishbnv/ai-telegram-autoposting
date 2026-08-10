@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@db": ["../db/src/index.ts"],
+      "@contracts": ["../contracts/src/index.ts"]
+    }
+  },
+  "include": ["src", "vitest.config.ts"]
+}
