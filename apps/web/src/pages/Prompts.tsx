@@ -19,6 +19,7 @@ import {
 } from "@ui"
 import { useEffect, useRef, useState } from "react"
 
+import { ConfirmButton } from "@/components/ConfirmButton"
 import { DataState } from "@/components/DataState"
 import {
   DialogColumn,
@@ -200,13 +201,14 @@ export function PromptsPage() {
                       >
                         Edit
                       </Button>
-                      <Button
+                      <ConfirmButton
                         size="xs"
                         variant="ghost"
-                        onClick={() => void store.remove(prompt.id)}
+                        confirmLabel="Delete prompt?"
+                        onConfirm={() => void store.remove(prompt.id)}
                       >
                         Delete
-                      </Button>
+                      </ConfirmButton>
                     </div>
                   </TableCell>
                 </TableRow>

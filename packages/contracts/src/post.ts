@@ -32,7 +32,8 @@ export type PostDto = {
   id: string
   pipelineId: string
   pipelineName: string
-  newsItemId: string
+  /** Null once the item it was written from has been pruned or its source deleted. */
+  newsItemId: string | null
   channelId: string
   channelTitle: string
   promptId: string

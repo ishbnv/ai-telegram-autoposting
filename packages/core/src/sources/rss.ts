@@ -2,6 +2,7 @@ import { XMLParser } from "fast-xml-parser"
 
 import { fetchText } from "../http/fetch"
 import { absoluteUrl, parseDate, stripHtml } from "./text"
+import { requestOptions } from "./request"
 import type { FetchedItem, SourceAdapter, SourceFetchContext } from "./types"
 import { asList, asRecord, asText, attribute } from "./xml"
 
@@ -183,10 +184,7 @@ export const rssAdapter: SourceAdapter = {
     const xml = await fetchText(
       context.url,
       { headers: { accept: "application/rss+xml, application/xml, text/xml" } },
-      {
-        ...(context.proxyUrl ? { proxyUrl: context.proxyUrl } : {}),
-        ...(context.signal ? { signal: context.signal } : {}),
-      }
+      requestOptions(context)
     )
 
     return parseFeed(xml, context.url)

@@ -157,7 +157,12 @@ model PipelineSource {
 model Post {
   id         String     @id @default(cuid())
   pipelineId String
-  newsItemId String
+  /// Nullable so a post outlives the item it was written from. Deleting a
+  /// source used to cascade Source → NewsItem → Post → Publication and wipe the
+  /// record of everything ever published from it, while the messages stayed
+  /// live in the channel. `sourceName`/`sourceUrl` below are denormalised for
+  /// exactly this case.
+  newsItemId String?
   channelId  String
   promptId   String
   /// Model actually used, copied from the prompt at generation time so later
@@ -181,7 +186,7 @@ model Post {
   updatedAt DateTime @updatedAt
 
   pipeline     Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  newsItem     NewsItem      @relation(fields: [newsItemId], references: [id], onDelete: Cascade)
+  newsItem     NewsItem?     @relation(fields: [newsItemId], references: [id], onDelete: SetNull)
   channel      Channel       @relation(fields: [channelId], references: [id], onDelete: Cascade)
   prompt       Prompt        @relation(fields: [promptId], references: [id], onDelete: Restrict)
   publications Publication[]

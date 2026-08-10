@@ -35,7 +35,16 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 async function runOne(ctx: WorkerContext, job: Job): Promise<void> {
   try {
     await HANDLERS[job.type](ctx, job)
-    await ctx.queue.complete(job.id)
+
+    if (!(await ctx.queue.complete(job.id))) {
+      // The stale sweep gave this job to someone else while we were running it,
+      // so our result is the one being discarded. Worth knowing about: it means
+      // the handler took longer than the stale threshold.
+      ctx.logger.warn(
+        { jobId: job.id, type: job.type },
+        "finished a job whose lock had already been taken"
+      )
+    }
   } catch (error) {
     ctx.logger.error(
       {
@@ -46,7 +55,14 @@ async function runOne(ctx: WorkerContext, job: Job): Promise<void> {
       },
       "job failed"
     )
-    await ctx.queue.fail(job.id, error)
+
+    await ctx.queue.fail(job.id, error).catch((failure: unknown) =>
+      // Never let bookkeeping throw out of here: it would take down the loop.
+      ctx.logger.error(
+        { jobId: job.id, err: String(failure) },
+        "could not record the job failure"
+      )
+    )
   }
 }
 
@@ -57,23 +73,39 @@ export async function runQueue(
   let lastSweep = 0
 
   while (!signal.aborted) {
-    if (Date.now() - lastSweep > STALE_SWEEP_MS) {
-      lastSweep = Date.now()
-      const requeued = await ctx.queue.requeueStale(STALE_AFTER_MS)
-      if (requeued > 0) {
-        ctx.logger.warn({ requeued }, "recovered jobs from a dead worker")
+    /**
+     * The whole tick is guarded, like the scheduler's. `claim` and
+     * `requeueStale` talk to Postgres, so a restart or a pool timeout throws
+     * here — and an unhandled rejection walks out of this loop, through the
+     * `Promise.all` in main, and exits the process. A worker that dies on the
+     * first connection blip is worse than one that waits and tries again.
+     */
+    try {
+      if (Date.now() - lastSweep > STALE_SWEEP_MS) {
+        lastSweep = Date.now()
+        const requeued = await ctx.queue.requeueStale(STALE_AFTER_MS)
+        if (requeued > 0) {
+          ctx.logger.warn({ requeued }, "recovered jobs from a dead worker")
+        }
       }
-    }
 
-    const jobs = await ctx.queue.claim(ALL_TYPES, BATCH_SIZE)
+      const jobs = await ctx.queue.claim(ALL_TYPES, BATCH_SIZE)
 
-    if (jobs.length === 0) {
+      if (jobs.length === 0) {
+        await sleep(IDLE_DELAY_MS)
+        continue
+      }
+
+      // Different jobs touch different rows, and one slow generation should not
+      // hold up a publish that is ready to go.
+      await Promise.all(jobs.map((job) => runOne(ctx, job)))
+    } catch (error) {
+      if (signal.aborted) {
+        return
+      }
+
+      ctx.logger.error({ err: String(error) }, "queue tick failed")
       await sleep(IDLE_DELAY_MS)
-      continue
     }
-
-    // Different jobs touch different rows, and one slow generation should not
-    // hold up a publish that is ready to go.
-    await Promise.all(jobs.map((job) => runOne(ctx, job)))
   }
 }

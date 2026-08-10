@@ -175,9 +175,19 @@ export const postRoutes = new Hono<AppEnv>()
     const { id } = c.req.valid("param")
     const prisma = c.get("prisma")
 
-    const moved = await transition(prisma, id, ["PENDING_APPROVAL"], "REJECTED")
+    // APPROVED too: a post whose publish job ran out of attempts stays there,
+    // and without an exit it could never be dismissed. Safe because the publish
+    // handler re-checks the status when it claims the job.
+    const moved = await transition(
+      prisma,
+      id,
+      ["PENDING_APPROVAL", "APPROVED", "FAILED"],
+      "REJECTED"
+    )
     if (!moved) {
-      throw new HTTPException(409, { message: "Post is not awaiting approval" })
+      throw new HTTPException(409, {
+        message: "Post cannot be rejected in its current state",
+      })
     }
 
     return c.json<PostDto>(toPostDto(await loadPost(prisma, id)))
@@ -190,7 +200,7 @@ export const postRoutes = new Hono<AppEnv>()
     const moved = await transition(
       prisma,
       id,
-      ["PENDING_APPROVAL", "FAILED"],
+      ["PENDING_APPROVAL", "APPROVED", "FAILED"],
       "GENERATING",
       { error: null }
     )

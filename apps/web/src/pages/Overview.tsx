@@ -435,15 +435,28 @@ function PostsTable() {
                         </Button>
                       </>
                     ) : null}
-                    {post.status === "FAILED" ? (
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        disabled={acting === post.id}
-                        onClick={() => void act(post.id, "regenerate")}
-                      >
-                        Retry
-                      </Button>
+                    {/* A post whose publish job ran out of attempts is stuck in
+                        one of these two states. Without an exit here it stays
+                        in the Queued tile forever with nothing to click. */}
+                    {post.status === "FAILED" || post.status === "APPROVED" ? (
+                      <>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          disabled={acting === post.id}
+                          onClick={() => void act(post.id, "regenerate")}
+                        >
+                          Retry
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          disabled={acting === post.id}
+                          onClick={() => void act(post.id, "reject")}
+                        >
+                          Discard
+                        </Button>
+                      </>
                     ) : null}
                   </div>
                 </TableCell>

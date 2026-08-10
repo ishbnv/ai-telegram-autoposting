@@ -18,6 +18,7 @@ import {
 } from "@ui"
 import { useEffect, useState } from "react"
 
+import { ConfirmButton } from "@/components/ConfirmButton"
 import { DataState } from "@/components/DataState"
 import { Field, FormDialog } from "@/components/FormDialog"
 import { PageHeader } from "@/components/PageHeader"
@@ -249,13 +250,14 @@ export function SourcesPage() {
                       >
                         Edit
                       </Button>
-                      <Button
+                      <ConfirmButton
                         size="xs"
                         variant="ghost"
-                        onClick={() => void store.remove(source.id)}
+                        confirmLabel="Delete + its news?"
+                        onConfirm={() => void store.remove(source.id)}
                       >
                         Delete
-                      </Button>
+                      </ConfirmButton>
                     </div>
                   </TableCell>
                 </TableRow>

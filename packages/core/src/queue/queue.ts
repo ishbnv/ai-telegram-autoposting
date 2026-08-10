@@ -86,9 +86,18 @@ export class JobQueue {
     `
   }
 
-  async complete(id: string): Promise<void> {
-    await this.prisma.job.update({
-      where: { id },
+  /**
+   * Conditional on still holding the lock, for the same reason every Post
+   * transition is. A job whose handler outran `requeueStale` has already been
+   * handed to another worker; writing DONE unconditionally would stamp over
+   * that worker's run and let `fail` later resurrect finished work.
+   *
+   * Returns false when the lock was lost, which the caller logs rather than
+   * treats as success.
+   */
+  async complete(id: string): Promise<boolean> {
+    const { count } = await this.prisma.job.updateMany({
+      where: { id, status: "RUNNING", lockedBy: this.workerId },
       data: {
         status: "DONE",
         lockedAt: null,
@@ -99,6 +108,8 @@ export class JobQueue {
         dedupeKey: null,
       },
     })
+
+    return count > 0
   }
 
   /**
@@ -109,11 +120,11 @@ export class JobQueue {
     id: string,
     error: unknown,
     retryDelayMs = DEFAULT_RETRY_DELAY_MS
-  ): Promise<void> {
+  ): Promise<boolean> {
     const message = describe(error).slice(0, MAX_ERROR_CHARS)
     const seconds = Math.max(1, Math.round(retryDelayMs / 1000))
 
-    await this.prisma.$executeRaw`
+    const count = await this.prisma.$executeRaw`
       UPDATE "Job"
       SET status = CASE
             WHEN attempts >= "maxAttempts" THEN 'FAILED'::"JobStatus"
@@ -133,8 +144,15 @@ export class JobQueue {
           "lockedAt" = NULL,
           "lockedBy" = NULL,
           "updatedAt" = now()
+      -- Same lock check as complete(): without it a slow handler that lost its
+      -- job to requeueStale would knock the new claimant back to PENDING and
+      -- the work would run a third time.
       WHERE id = ${id}
+        AND status = 'RUNNING'
+        AND "lockedBy" = ${this.workerId}
     `
+
+    return count > 0
   }
 
   /**

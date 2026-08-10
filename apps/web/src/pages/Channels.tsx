@@ -13,6 +13,7 @@ import {
 } from "@ui"
 import { useEffect, useState } from "react"
 
+import { ConfirmButton } from "@/components/ConfirmButton"
 import { DataState } from "@/components/DataState"
 import { Field, FormDialog } from "@/components/FormDialog"
 import { PageHeader } from "@/components/PageHeader"
@@ -152,13 +153,14 @@ export function ChannelsPage() {
                       >
                         Edit
                       </Button>
-                      <Button
+                      <ConfirmButton
                         size="xs"
                         variant="ghost"
-                        onClick={() => void store.remove(channel.id)}
+                        confirmLabel="Delete channel?"
+                        onConfirm={() => void store.remove(channel.id)}
                       >
                         Delete
-                      </Button>
+                      </ConfirmButton>
                     </div>
                   </TableCell>
                 </TableRow>

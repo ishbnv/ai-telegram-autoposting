@@ -39,9 +39,22 @@ export const redditSourceConfigSchema = z.object({
 export type HtmlSourceConfig = z.infer<typeof htmlSourceConfigSchema>
 export type RedditSourceConfig = z.infer<typeof redditSourceConfigSchema>
 
+/**
+ * `z.url()` alone accepts `file:///etc/passwd` and `gopher://`. The worker also
+ * refuses addresses that are not publicly routable at fetch time, but catching
+ * the scheme here means the operator is told when they save the source rather
+ * than fifteen minutes later through `lastError`.
+ */
+const httpUrl = z
+  .url()
+  .refine(
+    (value) => /^https?:\/\//i.test(value),
+    "must be an http or https URL"
+  )
+
 const sourceBase = {
   name: z.string().min(1).max(200),
-  url: z.url(),
+  url: httpUrl,
   isActive: z.boolean().default(true),
   /** Lower bound of 60s keeps a misconfigured source from hammering a site. */
   fetchIntervalSec: z.number().int().min(60).max(86_400).default(900),
@@ -74,7 +87,7 @@ export const createSourceSchema = z.discriminatedUnion("type", [
 
 export const updateSourceSchema = z.object({
   name: sourceBase.name.optional(),
-  url: sourceBase.url.optional(),
+  url: httpUrl.optional(),
   isActive: z.boolean().optional(),
   fetchIntervalSec: z.number().int().min(60).max(86_400).optional(),
   proxyId: z.string().nullish(),

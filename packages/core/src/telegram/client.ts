@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { fetchJson, type HttpRequestOptions } from "../http/fetch"
+import { fetchJson, HttpError, type HttpRequestOptions } from "../http/fetch"
 import type { InlineKeyboardMarkup } from "./markup"
 
 const API_ROOT = "https://api.telegram.org"
@@ -64,6 +64,14 @@ export type TelegramMessage = z.infer<typeof messageSchema>
 export type TelegramCallbackQuery = z.infer<typeof callbackQuerySchema>
 export type TelegramUpdate = z.infer<typeof updateSchema>
 export type TelegramUser = z.infer<typeof userSchema>
+
+/** The ok:false half of the envelope, as it arrives on a non-2xx response. */
+const telegramErrorSchema = z.object({
+  ok: z.literal(false),
+  description: z.string().optional(),
+  error_code: z.number().optional(),
+  parameters: z.object({ retry_after: z.number().optional() }).optional(),
+})
 
 function envelope<T extends z.ZodType>(result: T) {
   return z.union([
@@ -291,9 +299,15 @@ export class TelegramClient {
         { proxyUrl: this.options.proxyUrl, ...overrides }
       )
     } catch (error) {
-      // The token sits in the request path, so it is in the message and stack of
-      // anything thrown from here. Scrub it before it reaches a log.
-      throw this.withoutToken(error)
+      /**
+       * Telegram reports API errors with a non-2xx status *and* the ok:false
+       * body, so `httpRequest` throws `HttpError` and the envelope branch below
+       * is never reached for a real failure. Without this translation
+       * `TelegramApiError` is dead code — and so is everything that branches on
+       * it, such as the fall back from a photo card to a text one.
+       */
+      const apiError = this.asApiError(method, error)
+      throw this.withoutToken(apiError ?? error)
     }
 
     if (!response.ok) {
@@ -305,6 +319,39 @@ export class TelegramClient {
     }
 
     return response.result as T
+  }
+
+  /** Recovers the Bot API's own error out of a non-2xx response body. */
+  private asApiError(method: string, error: unknown): TelegramApiError | null {
+    if (!(error instanceof HttpError)) {
+      return null
+    }
+
+    let body: unknown
+    try {
+      body = JSON.parse(error.body)
+    } catch {
+      return new TelegramApiError(
+        method,
+        error.status,
+        error.body.slice(0, 200)
+      )
+    }
+
+    const parsed = telegramErrorSchema.safeParse(body)
+    if (!parsed.success) {
+      return new TelegramApiError(
+        method,
+        error.status,
+        error.body.slice(0, 200)
+      )
+    }
+
+    return new TelegramApiError(
+      method,
+      parsed.data.error_code ?? error.status,
+      parsed.data.description ?? "no description"
+    )
   }
 
   /**

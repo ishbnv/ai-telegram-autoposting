@@ -7,6 +7,8 @@ import {
 } from "undici"
 import type { ZodType } from "zod"
 
+import { assertPublicUrl, BlockedHostError } from "./ssrf"
+
 export const DEFAULT_TIMEOUT_MS = 15_000
 export const DEFAULT_RETRIES = 2
 
@@ -34,6 +36,14 @@ export type HttpRequestOptions = {
    * us the response was lost, not that the server ignored the request.
    */
   retryNonIdempotent?: boolean
+  /**
+   * Refuse http(s) requests to addresses that are not publicly routable, and
+   * re-check after every redirect. On for operator-supplied URLs — sources —
+   * and off for the fixed hosts we ship, which need no guarding.
+   */
+  blockPrivateHosts?: boolean
+  /** Cap on the body a `fetchText`/`fetchJson` will buffer. */
+  maxBytes?: number
 }
 
 export class HttpError extends Error {
@@ -96,6 +106,99 @@ function retryAfterMs(response: Response): number | undefined {
   return Number.isNaN(date) ? undefined : Math.max(0, date - Date.now())
 }
 
+/** Enough for any feed worth reading; a bomb is far past it. */
+export const DEFAULT_MAX_BYTES = 8 * 1024 * 1024
+
+/** Bounded so a redirect loop cannot spin forever. */
+const MAX_REDIRECTS = 5
+
+export class ResponseTooLargeError extends Error {
+  override readonly name = "ResponseTooLargeError"
+
+  constructor(
+    readonly url: string,
+    readonly maxBytes: number
+  ) {
+    super(`Response from ${url} exceeds ${maxBytes} bytes`)
+  }
+}
+
+/**
+ * Follows redirects by hand so every hop is checked, not just the first. With
+ * `redirect: "follow"` a public URL could bounce the request straight to
+ * 169.254.169.254 and the guard would never see it.
+ */
+async function fetchGuarded(
+  url: string,
+  init: RequestInit,
+  signal: AbortSignal,
+  proxyUrl: string | undefined
+): Promise<Response> {
+  let target = url
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    await assertPublicUrl(target)
+
+    const response = await fetch(target, {
+      ...init,
+      signal,
+      redirect: "manual",
+      dispatcher: dispatcherFor(proxyUrl),
+    })
+
+    const location = response.headers.get("location")
+    if (response.status < 300 || response.status >= 400 || !location) {
+      return response
+    }
+
+    target = new URL(location, target).toString()
+  }
+
+  throw new BlockedHostError(url, `more than ${MAX_REDIRECTS} redirects`)
+}
+
+/**
+ * Reads a body with a ceiling. `response.text()` buffers whatever arrives, so
+ * an endpoint streaming gigabytes — or a compressed bomb, which undici expands
+ * transparently — takes the process out with an allocation failure.
+ */
+async function readCapped(
+  response: Response,
+  url: string,
+  maxBytes: number
+): Promise<string> {
+  const declared = Number(response.headers.get("content-length"))
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await response.body?.cancel()
+    throw new ResponseTooLargeError(url, maxBytes)
+  }
+
+  if (!response.body) {
+    return ""
+  }
+
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) {
+      break
+    }
+
+    total += value.byteLength
+    if (total > maxBytes) {
+      await reader.cancel()
+      throw new ResponseTooLargeError(url, maxBytes)
+    }
+
+    chunks.push(value)
+  }
+
+  return new TextDecoder().decode(Buffer.concat(chunks))
+}
+
 function backoffMs(attempt: number): number {
   const base = 500 * 2 ** attempt
   // Jitter keeps several workers from retrying in lockstep.
@@ -118,6 +221,7 @@ export async function httpRequest(
     proxyUrl,
     signal,
     retryNonIdempotent = false,
+    blockPrivateHosts = false,
   } = options
 
   const method = (init.method ?? "GET").toUpperCase()
@@ -147,17 +251,23 @@ export async function httpRequest(
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout
 
     try {
-      const response = await fetch(url, {
-        ...init,
-        signal: combined,
-        dispatcher: dispatcherFor(proxyUrl),
-      })
+      const response = blockPrivateHosts
+        ? await fetchGuarded(url, init, combined, proxyUrl)
+        : await fetch(url, {
+            ...init,
+            signal: combined,
+            dispatcher: dispatcherFor(proxyUrl),
+          })
 
       if (response.ok) {
         return response
       }
 
-      const body = await response.text().catch(() => "")
+      // Capped like any other body: an error page can be enormous, and this one
+      // is kept on the error object and written to Source.lastError.
+      const body = await readCapped(response, url, MAX_ERROR_BODY_CHARS).catch(
+        () => ""
+      )
 
       if (!canRetry(response.status) || attempt === retries) {
         throw new HttpError(response.status, url, body)
@@ -169,6 +279,14 @@ export async function httpRequest(
     } catch (error) {
       // A caller-initiated abort is a decision, not a failure to retry around.
       if (signal?.aborted) {
+        throw error
+      }
+
+      // Deterministic refusals: the next attempt reaches the same verdict.
+      if (
+        error instanceof BlockedHostError ||
+        error instanceof ResponseTooLargeError
+      ) {
         throw error
       }
 
@@ -198,7 +316,7 @@ export async function fetchText(
   options?: HttpRequestOptions
 ): Promise<string> {
   const response = await httpRequest(url, init, options)
-  return response.text()
+  return readCapped(response, url, options?.maxBytes ?? DEFAULT_MAX_BYTES)
 }
 
 /**
@@ -212,7 +330,11 @@ export async function fetchJson<T>(
   options?: HttpRequestOptions
 ): Promise<T> {
   const response = await httpRequest(url, init, options)
-  const raw = await response.text()
+  const raw = await readCapped(
+    response,
+    url,
+    options?.maxBytes ?? DEFAULT_MAX_BYTES
+  )
 
   let parsed: unknown
   try {

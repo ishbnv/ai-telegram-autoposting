@@ -14,11 +14,20 @@ import { moderatesPost } from "@/lib/moderates"
 /** A ForceReply prompt quoting the whole draft would hit Telegram's limit. */
 const PROMPT_DRAFT_LIMIT = 2_000
 
-/** Which statuses each button is allowed to act on. */
+/**
+ * Which statuses each button is allowed to act on.
+ *
+ * APPROVED is included in the two escape hatches on purpose. A post whose
+ * publish job exhausts its retries stays APPROVED, and every action used to
+ * require PENDING_APPROVAL — so it could never be published, retried or
+ * dismissed again, and sat in the "queued" counter forever. Both are safe: the
+ * publish handler re-checks the status when it claims, so a post moved out of
+ * APPROVED is skipped rather than sent.
+ */
 const ALLOWED_FROM: Record<ModerationAction, PostStatus[]> = {
   publish: ["PENDING_APPROVAL"],
-  reject: ["PENDING_APPROVAL"],
-  regenerate: ["PENDING_APPROVAL", "FAILED"],
+  reject: ["PENDING_APPROVAL", "APPROVED", "FAILED"],
+  regenerate: ["PENDING_APPROVAL", "APPROVED", "FAILED"],
   edit: ["PENDING_APPROVAL"],
 }
 

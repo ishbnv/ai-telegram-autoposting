@@ -32,6 +32,19 @@ export async function handleGeneratePost(
     return
   }
 
+  // The source this post came from was deleted while it sat in the queue.
+  // Retrying cannot bring the item back, so the job ends here rather than
+  // burning attempts.
+  const { newsItem } = post
+  if (!newsItem) {
+    await ctx.prisma.post.updateMany({
+      where: { id: post.id, status: "GENERATING" },
+      data: { status: "FAILED", error: "the source item was deleted" },
+    })
+    ctx.logger.warn({ postId }, "news item is gone, nothing to generate from")
+    return
+  }
+
   try {
     const result = await ctx.llm.chat({
       model: post.prompt.model,
@@ -39,10 +52,10 @@ export async function handleGeneratePost(
         systemPrompt: post.prompt.systemPrompt,
         userTemplate: post.prompt.userTemplate,
         values: {
-          title: post.newsItem.title,
-          url: post.newsItem.url,
-          summary: post.newsItem.summary,
-          content: post.newsItem.content,
+          title: newsItem.title,
+          url: newsItem.url,
+          summary: newsItem.summary,
+          content: newsItem.content,
         },
       }),
       temperature: post.prompt.temperature,
@@ -83,6 +96,10 @@ export async function handleGeneratePost(
         model: result.model,
         moderationChatId: card.chatId,
         moderationMessageId: card.messageId,
+        // Telegram refused the image, so the card is text. Forgetting the URL
+        // keeps every later edit and the publish itself on the text methods —
+        // otherwise they would all address a caption that does not exist.
+        ...(card.usedPhoto ? {} : { mediaUrl: null }),
         error: null,
       },
     })

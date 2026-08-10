@@ -1,4 +1,9 @@
-import { HttpError, renderCardBody, updateModerationCard } from "@core"
+import {
+  HttpError,
+  renderCardBody,
+  TelegramApiError,
+  updateModerationCard,
+} from "@core"
 import type { Job } from "@db"
 import { z } from "zod"
 
@@ -64,9 +69,7 @@ export async function handlePublishPost(
   let deliveredMessageId: number | null = null
 
   try {
-    const message = post.mediaUrl
-      ? await ctx.telegram.sendPhoto(post.channel.tgChatId, post.mediaUrl, body)
-      : await ctx.telegram.sendMessage(post.channel.tgChatId, body)
+    const message = await send(ctx, post, body)
 
     deliveredMessageId = message.message_id
 
@@ -152,11 +155,58 @@ export async function handlePublishPost(
 }
 
 /**
+ * Sends the post, falling back to text when Telegram refuses the image.
+ *
+ * The moderation card does the same, so a post whose image cannot be fetched
+ * still reaches a moderator — but the image can rot between the draft and the
+ * approval, and without this the post would then be approvable and unpublishable
+ * forever. Only a 4xx triggers the fallback: it proves the photo was rejected
+ * rather than sent, so the second call cannot duplicate.
+ */
+async function send(
+  ctx: WorkerContext,
+  post: { mediaUrl: string | null; channel: { tgChatId: bigint } },
+  body: string
+): Promise<{ message_id: number }> {
+  if (!post.mediaUrl) {
+    return ctx.telegram.sendMessage(post.channel.tgChatId, body)
+  }
+
+  try {
+    return await ctx.telegram.sendPhoto(
+      post.channel.tgChatId,
+      post.mediaUrl,
+      body
+    )
+  } catch (error) {
+    if (!(error instanceof TelegramApiError) || !refusedOutright(error)) {
+      throw error
+    }
+
+    ctx.logger.warn(
+      { err: error.message },
+      "channel refused the photo, publishing as text"
+    )
+
+    return ctx.telegram.sendMessage(post.channel.tgChatId, body)
+  }
+}
+
+function refusedOutright(error: TelegramApiError): boolean {
+  const code = error.errorCode ?? 0
+  return code >= 400 && code < 500
+}
+
+/**
  * Telegram answered with a 4xx: it parsed the request and refused it, which is
  * proof that no message was sent. A 5xx or a transport error proves nothing —
  * the backend may already have delivered.
  */
 function provesNotDelivered(error: unknown): boolean {
+  if (error instanceof TelegramApiError) {
+    return refusedOutright(error)
+  }
+
   return error instanceof HttpError && error.status >= 400 && error.status < 500
 }
 

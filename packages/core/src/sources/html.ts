@@ -3,6 +3,7 @@ import * as cheerio from "cheerio"
 
 import { fetchText } from "../http/fetch"
 import { absoluteUrl, parseDate, stripHtml } from "./text"
+import { requestOptions } from "./request"
 import {
   SourceConfigError,
   type FetchedItem,
@@ -96,10 +97,7 @@ export const htmlAdapter: SourceAdapter = {
     const html = await fetchText(
       context.url,
       { headers: { accept: "text/html" } },
-      {
-        ...(context.proxyUrl ? { proxyUrl: context.proxyUrl } : {}),
-        ...(context.signal ? { signal: context.signal } : {}),
-      }
+      requestOptions(context)
     )
 
     return parseHtml(html, parsed.data, context.url)

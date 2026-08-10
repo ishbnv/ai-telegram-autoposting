@@ -22,6 +22,14 @@ export type CardTarget = {
 export type PlacedCard = {
   chatId: bigint
   messageId: number
+  /**
+   * False when the image was refused and a text card went out instead. The
+   * caller must clear `mediaUrl` in that case: every later edit picks
+   * `editMessageCaption` vs `editMessageText` from it, and publishing picks
+   * `sendPhoto` vs `sendMessage` the same way — so a stale `mediaUrl` means
+   * every one of those calls targets the wrong method and fails.
+   */
+  usedPhoto: boolean
 }
 
 export function renderCardBody(
@@ -65,7 +73,7 @@ export async function sendModerationCard(
         { replyMarkup }
       )
 
-      return { chatId, messageId: message.message_id }
+      return { chatId, messageId: message.message_id, usedPhoto: true }
     } catch (error) {
       // Telegram fetches the image itself and rejects anything it cannot read.
       // A broken preview URL must not cost us the whole post.
@@ -83,7 +91,7 @@ export async function sendModerationCard(
     { replyMarkup }
   )
 
-  return { chatId, messageId: message.message_id }
+  return { chatId, messageId: message.message_id, usedPhoto: false }
 }
 
 export type PlacedPost = CardPost & {

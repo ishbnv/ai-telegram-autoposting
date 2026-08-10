@@ -18,6 +18,7 @@ import {
 } from "@ui"
 import { useEffect, useState } from "react"
 
+import { ConfirmButton } from "@/components/ConfirmButton"
 import { DataState } from "@/components/DataState"
 import { Field, FormDialog } from "@/components/FormDialog"
 import { PageHeader } from "@/components/PageHeader"
@@ -141,13 +142,14 @@ export function ProxiesPage() {
                       >
                         Edit
                       </Button>
-                      <Button
+                      <ConfirmButton
                         size="xs"
                         variant="ghost"
-                        onClick={() => void store.remove(proxy.id)}
+                        confirmLabel="Delete proxy?"
+                        onConfirm={() => void store.remove(proxy.id)}
                       >
                         Delete
-                      </Button>
+                      </ConfirmButton>
                     </div>
                   </TableCell>
                 </TableRow>

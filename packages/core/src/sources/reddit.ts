@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { fetchJson } from "../http/fetch"
 import { decodeEntities } from "./text"
+import { requestOptions } from "./request"
 import {
   SourceConfigError,
   type FetchedItem,
@@ -114,10 +115,7 @@ export const redditAdapter: SourceAdapter = {
       buildListingUrl(context.url, parsed.data),
       listingSchema,
       { headers: { "user-agent": USER_AGENT, accept: "application/json" } },
-      {
-        ...(context.proxyUrl ? { proxyUrl: context.proxyUrl } : {}),
-        ...(context.signal ? { signal: context.signal } : {}),
-      }
+      requestOptions(context)
     )
 
     return mapListing(listing, parsed.data)
