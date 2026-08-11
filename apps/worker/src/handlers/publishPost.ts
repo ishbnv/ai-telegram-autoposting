@@ -12,9 +12,15 @@ import type { WorkerContext } from "@/context"
 
 export const publishPostPayload = z.object({ postId: z.string().min(1) })
 
+/**
+ * `hourCycle` is pinned because the locale is not: inside a container
+ * `undefined` resolves to en-US, which stamps a Russian channel's cards with
+ * "08:59 PM". The zone still comes from TZ, so that has to be right in .env.
+ */
 const time = new Intl.DateTimeFormat(undefined, {
   hour: "2-digit",
   minute: "2-digit",
+  hourCycle: "h23",
 })
 
 export async function handlePublishPost(
@@ -182,18 +188,44 @@ async function send(
    * must keep throwing, because the message may well have landed and retrying
    * it in another shape would publish it twice.
    */
-  try {
-    return await ctx.telegram.sendRichMessage(post.channel.tgChatId, {
+  const rich = (mediaUrl: string | null) =>
+    ctx.telegram.sendRichMessage(post.channel.tgChatId, {
       markdown: renderRichPostMessage({
         text: post.text,
         footerTemplate: post.channel.footerTemplate,
         source: { name: post.sourceName, url: post.sourceUrl },
-        mediaUrl: post.mediaUrl,
+        mediaUrl,
       }),
     })
+
+  try {
+    return await rich(post.mediaUrl)
   } catch (error) {
     if (!(error instanceof TelegramApiError) || !refusedOutright(error)) {
       throw error
+    }
+
+    // Telegram refuses the whole message over an image it cannot fetch. The
+    // article is worth more than the picture, so it goes out without it before
+    // the plain path is considered.
+    if (post.mediaUrl) {
+      try {
+        const message = await rich(null)
+
+        ctx.logger.warn(
+          { err: error.message },
+          "channel refused the image, published the article without it"
+        )
+
+        return message
+      } catch (retryError) {
+        if (
+          !(retryError instanceof TelegramApiError) ||
+          !refusedOutright(retryError)
+        ) {
+          throw retryError
+        }
+      }
     }
 
     ctx.logger.warn(

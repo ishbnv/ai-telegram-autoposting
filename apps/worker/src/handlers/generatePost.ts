@@ -136,13 +136,12 @@ export async function handleGeneratePost(
         moderationChatId: card.chatId,
         moderationMessageId: card.messageId,
         richCard: card.isRich,
-        // Only on the plain path, and only when Telegram refused the image:
-        // there the URL decides `editMessageCaption` vs `editMessageText` and
-        // `sendPhoto` vs `sendMessage`, so a stale one points every later call
-        // at a caption that does not exist. A rich card carries the image
-        // inside its Markdown instead, where `usedPhoto` is always false and
-        // clearing the URL would silently drop the picture from the post.
-        ...(card.isRich || card.usedPhoto ? {} : { mediaUrl: null }),
+        // Forgotten whenever the image did not survive into the card, on
+        // either path. Keeping a URL Telegram has already refused means the
+        // publish offers it again and is refused again; on the plain path it
+        // also decides `editMessageCaption` vs `editMessageText`, so a stale
+        // one points every later call at a caption that does not exist.
+        ...(card.mediaKept ? {} : { mediaUrl: null }),
         error: null,
       },
     })

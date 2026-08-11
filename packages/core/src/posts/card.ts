@@ -1,7 +1,8 @@
 import { TelegramApiError, type TelegramClient } from "../telegram/client"
 import { buildModerationKeyboard } from "../telegram/markup"
-import { extractLinks, renderLinkAppendix } from "./links"
+import { extractLinks, renderLinkAppendix, renderSourceNote } from "./links"
 import {
+  PARAGRAPH_SPACER,
   renderPostCaption,
   renderPostMessage,
   renderRichPostMessage,
@@ -42,7 +43,17 @@ export type PlacedCard = {
    * every one of those calls targets the wrong method and fails.
    */
   usedPhoto: boolean
+  /**
+   * Whether the image survived into what was actually sent. False when Telegram
+   * refused it and the message went out without it — the caller must then clear
+   * `mediaUrl`, or the publish that follows will offer the same dead URL again
+   * and be refused the same way.
+   */
+  mediaKept: boolean
 }
+
+/** A blank line separates blocks in the source; this separates them on screen. */
+const BLOCK_GAP = `\n\n${PARAGRAPH_SPACER}\n\n`
 
 export function renderCardBody(
   post: CardPost,
@@ -60,24 +71,40 @@ export function renderCardBody(
 
 /**
  * The rich body of a card: the post exactly as it will appear in the channel,
- * followed by the list of link targets it contains.
+ * then a rule, then everything a moderator needs and a reader never sees.
  *
- * The appendix is the whole reason a moderator can still do their job here. In
+ * That second half is the whole reason a moderator can still do their job. In
  * the plain path the model's output is escaped and therefore inert; rendered,
  * a link shows its label and hides its destination, and the label is the part
  * an injected instruction gets to choose.
  */
 export function renderRichCardBody(post: CardPost, target: CardTarget): string {
+  const source = { name: post.sourceName, url: post.sourceUrl }
+
   const body = renderRichPostMessage({
     text: post.text,
     footerTemplate: target.footerTemplate,
-    source: { name: post.sourceName, url: post.sourceUrl },
+    source,
     mediaUrl: post.mediaUrl,
   })
 
-  const appendix = renderLinkAppendix(extractLinks(body))
+  /**
+   * Everything a moderator needs and a reader never sees, below a rule. The
+   * source belongs here unconditionally: whether it is credited in the channel
+   * is the operator's decision, expressed through the footer template and the
+   * prompt, but approving a draft without knowing where it came from is not a
+   * decision anyone should be asked to make.
+   */
+  const notes = [
+    renderSourceNote(source),
+    renderLinkAppendix(extractLinks(body)),
+  ].filter(Boolean)
 
-  return appendix ? `${body}\n\n---\n\n${appendix}` : body
+  // Spacer-joined, not blank-line-joined: these are adjacent blocks like any
+  // others, and Telegram renders adjacent blocks flush. The body gets this
+  // treatment inside the renderer; the notes are assembled after it, so they
+  // have to ask for it themselves.
+  return `${body}\n\n---\n\n${notes.join(BLOCK_GAP)}`
 }
 
 export type SendCardOptions = {
@@ -115,15 +142,49 @@ export async function sendModerationCard(
       messageId: message.message_id,
       usedPhoto: false,
       isRich: true,
+      mediaKept: Boolean(post.mediaUrl),
     }
   } catch (error) {
     if (!(error instanceof TelegramApiError)) {
       throw error
     }
 
-    // A chat that cannot take rich messages, or a draft Telegram would not
-    // parse. Neither is worth losing the post over.
-    options.onRichRejected?.(error)
+    /**
+     * Telegram fetches the image itself and refuses the whole message when it
+     * cannot — `RICH_MESSAGE_PHOTO_NO_MEDIA_FOUND` for a URL that 404s. Falling
+     * straight through to the plain card would throw away the headings, lists
+     * and links over one dead thumbnail, so the article is offered once more
+     * without it. Only then does the plain path get a turn.
+     */
+    if (post.mediaUrl) {
+      try {
+        const message = await telegram.sendRichMessage(
+          chatId,
+          { markdown: renderRichCardBody({ ...post, mediaUrl: null }, target) },
+          { replyMarkup }
+        )
+
+        options.onPhotoRejected?.(error)
+
+        return {
+          chatId,
+          messageId: message.message_id,
+          usedPhoto: false,
+          isRich: true,
+          mediaKept: false,
+        }
+      } catch (retryError) {
+        if (!(retryError instanceof TelegramApiError)) {
+          throw retryError
+        }
+
+        options.onRichRejected?.(retryError)
+      }
+    } else {
+      // A chat that cannot take rich messages, or a draft Telegram would not
+      // parse. Neither is worth losing the post over.
+      options.onRichRejected?.(error)
+    }
   }
 
   if (post.mediaUrl) {
@@ -140,6 +201,7 @@ export async function sendModerationCard(
         messageId: message.message_id,
         usedPhoto: true,
         isRich: false,
+        mediaKept: true,
       }
     } catch (error) {
       // Telegram fetches the image itself and rejects anything it cannot read.
@@ -163,6 +225,7 @@ export async function sendModerationCard(
     messageId: message.message_id,
     usedPhoto: false,
     isRich: false,
+    mediaKept: false,
   }
 }
 
@@ -196,7 +259,7 @@ export async function updateModerationCard(
     await telegram.editRichMessage(
       post.moderationChatId,
       post.moderationMessageId,
-      { markdown: note ? `${rich}\n\n${note}` : rich },
+      { markdown: note ? `${rich}${BLOCK_GAP}${note}` : rich },
       options
     )
 

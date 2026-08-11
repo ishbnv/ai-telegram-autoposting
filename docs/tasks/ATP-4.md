@@ -29,9 +29,8 @@ therefore do not combine, which is what forces the media decision below.
 ## Decisions
 
 **Media moves inline.** In rich mode the image is a leading `![](url)` in the Markdown rather than a
-`sendPhoto` caption. That retires the `usedPhoto` branching for rich posts. If Telegram refuses the
-image the send is retried once without it, preserving today's "a broken preview must not cost us the
-post" behaviour.
+`sendPhoto` caption. That retires the `usedPhoto` branching for rich posts. The retry-without-image
+this paragraph originally claimed was not actually built until ATP-8 — see that task.
 
 **Link targets are shown to the moderator.** Formatting is not restricted, but the moderation card
 gains an appendix listing every link in the draft with its target, rendered as inline code so it is
