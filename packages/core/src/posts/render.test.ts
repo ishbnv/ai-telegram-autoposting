@@ -240,3 +240,42 @@ describe("stripMarkdown", () => {
     expect(out).not.toContain("**")
   })
 })
+
+describe("cover image placement", () => {
+  const source = { name: "Блог", url: "https://example.com" }
+
+  it("sits under the title, the way an article reads", () => {
+    const out = renderRichPostMessage({
+      text: "# Заголовок статьи\n\nПервый абзац.",
+      footerTemplate: "",
+      source,
+      mediaUrl: "https://example.com/cover.jpg",
+    })
+
+    expect(out).toBe(
+      "# Заголовок статьи\n\n![](https://example.com/cover.jpg)\n\nПервый абзац."
+    )
+  })
+
+  it("leads when the post has no title to sit under", () => {
+    const out = renderRichPostMessage({
+      text: "Просто абзац без заголовка.",
+      footerTemplate: "",
+      source,
+      mediaUrl: "https://example.com/cover.jpg",
+    })
+
+    expect(out.startsWith("![](https://example.com/cover.jpg)")).toBe(true)
+  })
+
+  it("is not confused by a hash that is not a heading", () => {
+    const out = renderRichPostMessage({
+      text: "#hashtag не заголовок",
+      footerTemplate: "",
+      source,
+      mediaUrl: "https://example.com/cover.jpg",
+    })
+
+    expect(out.startsWith("![](")).toBe(true)
+  })
+})
