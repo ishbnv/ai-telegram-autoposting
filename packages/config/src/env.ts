@@ -45,9 +45,33 @@ export const openRouterEnvShape = {
   OPENROUTER_APP_TITLE: z.string().min(1).default("AI Telegram Autoposting"),
 }
 
+/**
+ * `scrypt:N:r:p:salt:key`, with `$` accepted for hashes generated before the
+ * separator changed. The salt and key are base64url, hence `[\w-]`, and the
+ * backreference keeps a hash from mixing the two separators.
+ *
+ * Checking the shape at startup exists to turn a silent failure into a loud
+ * one. A `$`-separated hash loses its salt and key to Docker Compose's variable
+ * expansion, and a value someone wrapped in quotes keeps the quotes; either way
+ * the old code started up healthy and then rejected the correct password
+ * forever, with nothing in any log pointing at the cause.
+ */
+const ADMIN_PASSWORD_HASH_PATTERN =
+  /^scrypt([:$])\d+\1\d+\1\d+\1[\w-]+\1[\w-]+$/
+
 export const apiEnvShape = {
   API_PORT: z.coerce.number().int().positive().max(65535).default(3000),
-  ADMIN_PASSWORD_HASH: z.string().min(1),
+  ADMIN_PASSWORD_HASH: z
+    .string()
+    .min(1)
+    .regex(
+      ADMIN_PASSWORD_HASH_PATTERN,
+      "must look like scrypt:N:r:p:salt:key — regenerate it with " +
+        "`pnpm --filter @workspace/api hash-password`. If the value came " +
+        "through Docker Compose, note that Compose expands `$` inside " +
+        "env-file values, which truncates an older `$`-separated hash; " +
+        "quoting the value in .env corrupts it too"
+    ),
   /** Signs the session cookie. Short secrets are trivially brute-forced. */
   SESSION_SECRET: z.string().min(32),
 }

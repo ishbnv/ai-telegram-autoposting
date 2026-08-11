@@ -12,6 +12,9 @@ import {
   telegramEnvShape,
 } from "./env"
 
+// Shape only — the value is never verified here, just parsed.
+const VALID_HASH = "scrypt:16384:8:1:c2FsdHNhbHQ:aGFzaGhhc2g"
+
 describe("optionalEnv", () => {
   const shape = {
     TOKEN: optionalEnv(z.string().min(1)),
@@ -63,7 +66,7 @@ describe("parseEnv", () => {
 
     const api = parseEnv(apiEnvShape, {
       API_PORT: "8080",
-      ADMIN_PASSWORD_HASH: "hash",
+      ADMIN_PASSWORD_HASH: VALID_HASH,
       SESSION_SECRET: "s".repeat(32),
     })
 
@@ -83,7 +86,7 @@ describe("parseEnv", () => {
   it("never echoes the offending value, since these end up in logs", () => {
     try {
       parseEnv(apiEnvShape, {
-        ADMIN_PASSWORD_HASH: "hash",
+        ADMIN_PASSWORD_HASH: VALID_HASH,
         SESSION_SECRET: "too-short",
       })
     } catch (error) {
@@ -95,9 +98,54 @@ describe("parseEnv", () => {
   it("rejects a session secret short enough to brute-force", () => {
     expect(() =>
       parseEnv(apiEnvShape, {
-        ADMIN_PASSWORD_HASH: "hash",
+        ADMIN_PASSWORD_HASH: VALID_HASH,
         SESSION_SECRET: "short",
       })
     ).toThrow(EnvironmentError)
+  })
+
+  describe("admin password hash", () => {
+    const withHash = (hash: string) =>
+      parseEnv(apiEnvShape, {
+        ADMIN_PASSWORD_HASH: hash,
+        SESSION_SECRET: "s".repeat(32),
+      })
+
+    it("accepts a hash generated before the separator changed", () => {
+      expect(() =>
+        withHash("scrypt$16384$8$1$c2FsdHNhbHQ$aGFzaGhhc2g")
+      ).not.toThrow()
+    })
+
+    /**
+     * The exact value a `$`-separated hash becomes after Docker Compose expands
+     * the env file: the salt and key are valid variable names and vanish, the
+     * numbers survive because a name cannot start with a digit. This used to
+     * start up fine and then reject the correct password forever.
+     */
+    it("rejects the wreckage Docker Compose makes of a $-separated hash", () => {
+      expect(() => withHash("scrypt$16384$8$1")).toThrow(EnvironmentError)
+    })
+
+    it("rejects a hash someone quoted in .env", () => {
+      expect(() =>
+        withHash('"scrypt:16384:8:1:c2FsdHNhbHQ:aGFzaGhhc2g"')
+      ).toThrow(EnvironmentError)
+    })
+
+    it("rejects a hash that mixes the two separators", () => {
+      expect(() =>
+        withHash("scrypt:16384$8:1:c2FsdHNhbHQ:aGFzaGhhc2g")
+      ).toThrow(EnvironmentError)
+    })
+
+    it("does not echo the hash, which is still a credential", () => {
+      try {
+        withHash("scrypt$16384$8$1")
+      } catch (error) {
+        expect((error as Error).message).toContain("ADMIN_PASSWORD_HASH")
+        expect((error as Error).message).not.toContain("16384")
+      }
+    })
   })
 })
