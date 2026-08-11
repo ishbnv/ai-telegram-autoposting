@@ -2,7 +2,12 @@ import { hostname } from "node:os"
 import { fileURLToPath } from "node:url"
 
 import { createLogger, loadEnvFile } from "@config"
-import { JobQueue, TelegramClient } from "@core"
+import {
+  JobQueue,
+  TelegramApiError,
+  TelegramClient,
+  type TelegramUser,
+} from "@core"
 import { createPrismaClient, resolveProxyUrl } from "@db"
 
 import type { BotContext } from "./context"
@@ -10,6 +15,9 @@ import { loadBotEnv } from "./env"
 import { runPolling } from "./polling"
 
 const HEARTBEAT_INTERVAL_MS = 30_000
+/** Backoff for the startup handshake: quick at first, then patient. */
+const STARTUP_BASE_DELAY_MS = 2_000
+const STARTUP_MAX_DELAY_MS = 60_000
 
 loadEnvFile(fileURLToPath(new URL("../../../.env", import.meta.url)))
 
@@ -32,9 +40,43 @@ const telegram = new TelegramClient({
   ...(telegramProxyUrl ? { proxyUrl: telegramProxyUrl } : {}),
 })
 
-// Fail loudly at boot rather than silently polling with a bad token. The id is
-// also what lets the edit flow tell our own prompts from a user's imitation.
-const me = await telegram.getMe()
+/**
+ * Identifies the bot before polling starts — the id is what lets the edit flow
+ * tell our own prompts from a user's imitation, so there is nothing safe to do
+ * without it.
+ *
+ * A rejected token and an unreachable Telegram are not the same failure, and
+ * treating them alike is what turned a network outage into a crash loop: the
+ * process exited, Docker restarted it, and it exited again, forever. A bad
+ * token stays fatal — no amount of waiting fixes it. Everything else is worth
+ * sitting out, because Telegram comes back.
+ */
+async function identify(): Promise<TelegramUser> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await telegram.getMe()
+    } catch (error) {
+      if (error instanceof TelegramApiError && error.errorCode === 401) {
+        logger.fatal("TELEGRAM_BOT_TOKEN was rejected by Telegram")
+        process.exit(1)
+      }
+
+      const delayMs = Math.min(
+        STARTUP_MAX_DELAY_MS,
+        STARTUP_BASE_DELAY_MS * 2 ** (attempt - 1)
+      )
+
+      logger.error(
+        { attempt, delayMs, err: String(error) },
+        "cannot reach Telegram, retrying"
+      )
+
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+}
+
+const me = await identify()
 
 const ctx: BotContext = {
   prisma,

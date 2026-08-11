@@ -39,6 +39,40 @@ function prismaCode(error: unknown): string | null {
   return null
 }
 
+/**
+ * The columns a P2002 collided on. Prisma reports them in `meta.target`, as an
+ * array on most connectors and a string on some, so both are accepted.
+ */
+function conflictingFields(error: unknown): string[] {
+  if (typeof error !== "object" || error === null || !("meta" in error)) {
+    return []
+  }
+
+  const target = (error as { meta?: { target?: unknown } }).meta?.target
+
+  if (Array.isArray(target)) {
+    return target.filter((field): field is string => typeof field === "string")
+  }
+
+  return typeof target === "string" ? [target] : []
+}
+
+/**
+ * Names the field that collided. "Already exists" on its own sends an operator
+ * looking for the wrong duplicate — a proxy may legitimately be reused for
+ * several purposes, so being told the *label* is taken rather than the proxy is
+ * the difference between renaming it and giving up.
+ */
+function conflictMessage(error: unknown): string {
+  const fields = conflictingFields(error)
+
+  if (fields.length === 0) {
+    return "Already exists"
+  }
+
+  return `Another record already uses this ${fields.join(" + ")}`
+}
+
 export function createApp(deps: AppDeps) {
   const app = new Hono<AppEnv>()
 
@@ -65,7 +99,10 @@ export function createApp(deps: AppDeps) {
       return c.json<ApiError>({ error: { message: "Not found" } }, 404)
     }
     if (status === 409) {
-      return c.json<ApiError>({ error: { message: "Already exists" } }, 409)
+      return c.json<ApiError>(
+        { error: { message: conflictMessage(error) } },
+        409
+      )
     }
     if (status === 400) {
       return c.json<ApiError>(
