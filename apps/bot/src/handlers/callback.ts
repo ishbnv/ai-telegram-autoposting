@@ -149,7 +149,11 @@ async function transition(
   const { count } = await ctx.prisma.post.updateMany({
     where: { id: postId, status: { in: ALLOWED_FROM[action] } },
     data:
-      action === "regenerate" ? { status: to, error: null } : { status: to },
+      action === "regenerate"
+        ? // Cleared so the worker writes a new draft rather than reusing the one
+          // being rejected — an empty text on a GENERATING post means "unwritten".
+          { status: to, error: null, text: "" }
+        : { status: to },
   })
 
   return count > 0

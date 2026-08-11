@@ -6,6 +6,9 @@ import type { WorkerContext } from "@/context"
 
 export const generatePostPayload = z.object({ postId: z.string().min(1) })
 
+/** Either freshly written or carried over from an attempt that failed later. */
+type Draft = { text: string; model: string; reused: boolean }
+
 export async function handleGeneratePost(
   ctx: WorkerContext,
   job: Job
@@ -45,7 +48,13 @@ export async function handleGeneratePost(
     return
   }
 
-  try {
+  /**
+   * Calls the model, records what it cost, and writes the text down before
+   * anything else gets a chance to fail. The write is conditional on the post
+   * still being GENERATING, so a regenerate that landed while the model was
+   * thinking is not overwritten by the answer it superseded.
+   */
+  const generate = async (): Promise<Draft> => {
     const result = await ctx.llm.chat({
       model: post.prompt.model,
       messages: buildMessages({
@@ -72,6 +81,36 @@ export async function handleGeneratePost(
         latencyMs: result.latencyMs,
       },
     })
+
+    await ctx.prisma.post.updateMany({
+      where: { id: post.id, status: "GENERATING" },
+      data: { text: result.text, model: result.model },
+    })
+
+    return { text: result.text, model: result.model, reused: false }
+  }
+
+  try {
+    /**
+     * A draft left over from an earlier attempt is reused rather than bought
+     * again. Generation is the expensive step and it had already succeeded;
+     * what failed was the send after it, so re-running the model would pay
+     * OpenRouter a second and third time for the same words. Regeneration is
+     * unaffected because it clears the text — an empty `text` on a GENERATING
+     * post is precisely "not written yet".
+     */
+    const draft = post.text
+      ? { text: post.text, model: post.model, reused: true }
+      : await generate()
+
+    if (draft.reused) {
+      ctx.logger.info(
+        { postId },
+        "reusing the draft from an earlier attempt instead of regenerating"
+      )
+    }
+
+    const result = draft
 
     const card = await sendModerationCard(
       ctx.telegram,
@@ -117,7 +156,7 @@ export async function handleGeneratePost(
     }
 
     ctx.logger.info(
-      { postId, model: result.model, costUsd: result.costUsd },
+      { postId, model: result.model, reused: result.reused },
       "draft sent for approval"
     )
   } catch (error) {

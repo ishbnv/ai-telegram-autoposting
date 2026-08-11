@@ -72,12 +72,13 @@ function sanitize(value: string): string {
  */
 export const FORMATTING_GUIDE = [
   "Write the post in Telegram's rich Markdown:",
-  "`## heading` for a heading, `**bold**`, `*italic*`, `~~strikethrough~~`,",
-  "`||spoiler||`, `` `code` ``, `> quote`, `- item` for a list,",
+  "`# title` and `## section heading` for headings, `**bold**`, `*italic*`,",
+  "`~~strikethrough~~`, `||spoiler||`, `` `code` ``, `> quote`, `- item` for a list,",
   "`| a | b |` with a `|---|---|` separator row for a table, and `---` for a divider.",
-  "Use them where they help a reader and nowhere else — a three-sentence post needs none of them.",
-  "Do not wrap the whole post in a code block, and do not add a heading that just repeats the first sentence.",
-  "Never invent a link: the only URL that belongs in the post is one present in the source material.",
+  "Two hard rules: never wrap the whole post in a code block, and never invent a link —",
+  "the only URL that belongs in the post is one present in the source material.",
+  "How much structure to use, and how long the post should be, is decided by the",
+  "instructions above, not here.",
 ].join(" ")
 
 export type BuildMessagesInput = {

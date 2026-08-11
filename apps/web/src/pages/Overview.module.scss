@@ -79,8 +79,20 @@
   display: flex;
   // Keeps a long headline or post body from widening the table past the viewport.
   max-width: 544px;
+  min-width: 0;
   flex-direction: column;
   gap: $space-1;
+
+  // The cap above stops the table growing, but not the text: TableCell carries
+  // `whitespace-nowrap`, which every child inherits, so a draft longer than the
+  // cap used to paint straight across the Status and Channel columns instead of
+  // stopping at the edge. `min-width: 0` is what allows a flex item to shrink
+  // below its content width at all — without it the overflow rules never apply.
+  > * {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .subtle {

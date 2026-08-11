@@ -202,7 +202,9 @@ export const postRoutes = new Hono<AppEnv>()
       id,
       ["PENDING_APPROVAL", "APPROVED", "FAILED"],
       "GENERATING",
-      { error: null }
+      // Cleared so the worker writes a new draft instead of reusing this one:
+      // an empty text on a GENERATING post is what marks it as not yet written.
+      { error: null, text: "" }
     )
 
     if (!moved) {

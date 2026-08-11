@@ -241,6 +241,29 @@ export type RenderRichPostInput = {
  * lists every link target separately: what a human sees rendered no longer
  * tells them where a link actually goes.
  */
+/** A heading on the very first line, which the cover image is placed under. */
+const LEADING_HEADING = /^#{1,6}[ \t]+\S/
+
+/**
+ * Puts the image directly below the post's title rather than above it, which is
+ * how an article reads: name first, picture second. With no title to sit under,
+ * the image leads.
+ */
+function withCover(body: string, image: string): string {
+  if (!image) {
+    return body
+  }
+
+  const [first = "", ...rest] = body.split("\n")
+  if (!LEADING_HEADING.test(first)) {
+    return [image, body].join(BLOCK_SEPARATOR)
+  }
+
+  return [first.trim(), image, rest.join("\n").trim()]
+    .filter(Boolean)
+    .join(BLOCK_SEPARATOR)
+}
+
 export function renderRichPostMessage(input: RenderRichPostInput): string {
   const limit = input.limit ?? TELEGRAM_RICH_MESSAGE_LIMIT
   const footer = renderFooterMarkdown(input.footerTemplate, input.source)
@@ -252,5 +275,7 @@ export function renderRichPostMessage(input: RenderRichPostInput): string {
 
   const body = truncateMarkdown(input.text, Math.max(0, limit - overhead))
 
-  return [image, body, footer.trim()].filter(Boolean).join(BLOCK_SEPARATOR)
+  return [withCover(body, image), footer.trim()]
+    .filter(Boolean)
+    .join(BLOCK_SEPARATOR)
 }
