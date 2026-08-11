@@ -96,10 +96,14 @@ export async function handleGeneratePost(
         model: result.model,
         moderationChatId: card.chatId,
         moderationMessageId: card.messageId,
-        // Telegram refused the image, so the card is text. Forgetting the URL
-        // keeps every later edit and the publish itself on the text methods —
-        // otherwise they would all address a caption that does not exist.
-        ...(card.usedPhoto ? {} : { mediaUrl: null }),
+        richCard: card.isRich,
+        // Only on the plain path, and only when Telegram refused the image:
+        // there the URL decides `editMessageCaption` vs `editMessageText` and
+        // `sendPhoto` vs `sendMessage`, so a stale one points every later call
+        // at a caption that does not exist. A rich card carries the image
+        // inside its Markdown instead, where `usedPhoto` is always false and
+        // clearing the URL would silently drop the picture from the post.
+        ...(card.isRich || card.usedPhoto ? {} : { mediaUrl: null }),
         error: null,
       },
     })

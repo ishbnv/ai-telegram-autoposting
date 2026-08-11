@@ -1,0 +1,51 @@
+# Reverse proxy for the admin panel, for a host that already runs nginx.
+#
+# Copy to /etc/nginx/sites-available/<your-host>, replace panel.example.com with
+# your own name, symlink it into sites-enabled, then let certbot add the TLS
+# server block:
+#
+#   sudo ln -s /etc/nginx/sites-available/<your-host> /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+#   sudo certbot --nginx -d <your-host>
+#
+# certbot rewrites this file in place: it adds a second server block listening
+# on 443 with the certificate paths, and turns this one into a redirect. Leave
+# the proxy settings below alone and they carry over.
+#
+# HTTPS is not optional. The session cookie is issued with `Secure` whenever
+# NODE_ENV=production, which docker-compose.yml sets, so a browser will refuse
+# to store it over plain HTTP: the login request succeeds and you stay logged
+# out, with nothing in any log to explain it.
+
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name panel.example.com;
+
+    # Matches the loopback publication in docker-compose.yml. The container port
+    # is not reachable from outside the host, so this proxy is the only way in.
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Generating a draft goes out to OpenRouter and back before the request
+        # returns. The default 60s cuts off slower models mid-answer.
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+
+    # Nothing here is meant to be found in a search engine.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
+    # The panel posts prompts and post text, nothing larger.
+    client_max_body_size 2m;
+
+    access_log /var/log/nginx/autoposting.access.log;
+    error_log  /var/log/nginx/autoposting.error.log;
+}

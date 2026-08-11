@@ -148,6 +148,34 @@ The channel id is found the same way: make the bot an administrator of the chann
 forward that post to the bot in a direct message, and read `forward_from_chat.id` from `getUpdates`.
 That value goes into the **Channels** page in the panel, not into `.env`.
 
+## Putting it on a server
+
+The API publishes on `127.0.0.1:3000` and Postgres on `127.0.0.1:5432`, so neither is reachable
+from outside the host. Put a reverse proxy in front and terminate TLS there.
+
+**HTTPS is required, not recommended.** The session cookie is issued with `Secure` whenever
+`NODE_ENV=production` — which the compose file sets — so over plain HTTP the browser drops it: the
+login request returns 200 and you stay logged out, with nothing in any log explaining why.
+
+With nginx already on the host:
+
+```bash
+sudo cp docker/nginx/autoposting.conf.example /etc/nginx/sites-available/panel.example.com
+sudo sed -i 's/panel\.example\.com/your.host.name/' /etc/nginx/sites-available/panel.example.com
+sudo ln -s /etc/nginx/sites-available/panel.example.com /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d your.host.name
+```
+
+Point an `A` record at the server before running certbot — the HTTP-01 challenge resolves the name
+and fetches a file over port 80, so it fails if DNS has not caught up yet. Renewal is handled by the
+`certbot.timer` systemd unit that the package installs; `sudo certbot renew --dry-run` proves it.
+
+To expose the API directly instead, with nothing in front, set `API_BIND=0.0.0.0` — and arrange
+TLS some other way, or you will not be able to log in.
+
 ## Configuration
 
 All configuration is read from the environment — see [`.env.example`](.env.example) for the full

@@ -61,6 +61,25 @@ function sanitize(value: string): string {
   )
 }
 
+/**
+ * Telegram's Rich Markdown dialect, described to the model.
+ *
+ * Deliberately narrower than what the dialect allows. Footnotes, formulas,
+ * collages and slideshows all parse, but nothing in this pipeline has a use for
+ * them, and every construct offered is one more thing that can arrive
+ * malformed and cost the whole message a 400. Headings and tables are here
+ * because they are what the format is for.
+ */
+export const FORMATTING_GUIDE = [
+  "Write the post in Telegram's rich Markdown:",
+  "`## heading` for a heading, `**bold**`, `*italic*`, `~~strikethrough~~`,",
+  "`||spoiler||`, `` `code` ``, `> quote`, `- item` for a list,",
+  "`| a | b |` with a `|---|---|` separator row for a table, and `---` for a divider.",
+  "Use them where they help a reader and nowhere else — a three-sentence post needs none of them.",
+  "Do not wrap the whole post in a code block, and do not add a heading that just repeats the first sentence.",
+  "Never invent a link: the only URL that belongs in the post is one present in the source material.",
+].join(" ")
+
 export type BuildMessagesInput = {
   systemPrompt: string
   userTemplate: string
@@ -73,7 +92,11 @@ export function buildMessages(input: BuildMessagesInput): ChatMessage[] {
   return [
     {
       role: "system",
-      content: `${input.systemPrompt.trim()}\n\n${UNTRUSTED_CONTENT_GUARD}`,
+      content: [
+        input.systemPrompt.trim(),
+        FORMATTING_GUIDE,
+        UNTRUSTED_CONTENT_GUARD,
+      ].join("\n\n"),
     },
     {
       role: "user",
