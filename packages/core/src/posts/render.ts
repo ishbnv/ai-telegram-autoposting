@@ -287,10 +287,56 @@ export function normalizeBlockSpacing(value: string): string {
     out.push(line)
   }
 
-  return out
-    .join("\n")
-    .replaceAll(/\n{3,}/g, "\n\n")
-    .trim()
+  return addParagraphSpacers(
+    out
+      .join("\n")
+      .replaceAll(/\n{3,}/g, "\n\n")
+      .trim()
+  )
+}
+
+/**
+ * U+2800, the braille pattern with no dots raised.
+ *
+ * Telegram gives its rich blocks no vertical margin, so two adjacent paragraphs
+ * render flush against each other however the Markdown is written — a blank
+ * line between them changes the source and nothing on screen. Measured against
+ * a real client rather than assumed: of a blank line, a `---` divider, a quote
+ * block and this character, only the last two separated anything, and the
+ * divider draws a visible rule across the post.
+ *
+ * A space or a zero-width space will not do — both are trimmed back out of a
+ * block holding nothing else. This is a printable glyph that happens to be
+ * blank, so it survives and occupies a line.
+ */
+const PARAGRAPH_SPACER = "⠀"
+
+const BLOCK_WITH_OWN_SPACING =
+  /^[ \t]*(?:#{1,6}[ \t]|[-*+][ \t]|\d+\.[ \t]|>|\||!\[|```|(?:-{3,}|\*{3,}|_{3,})[ \t]*$)/
+
+/**
+ * Headings, lists, quotes, tables, images and rules already stand apart on
+ * screen, so a spacer beside one is wasted height. Only prose needs the help.
+ */
+function needsSpacer(block: string): boolean {
+  return block.trim() !== "" && !BLOCK_WITH_OWN_SPACING.test(block)
+}
+
+function addParagraphSpacers(value: string): string {
+  const blocks = value.split(BLOCK_SEPARATOR)
+  const out: string[] = []
+
+  for (const [index, block] of blocks.entries()) {
+    const previous = index > 0 ? (blocks[index - 1] ?? "") : ""
+
+    if (index > 0 && needsSpacer(previous) && needsSpacer(block)) {
+      out.push(PARAGRAPH_SPACER)
+    }
+
+    out.push(block)
+  }
+
+  return out.join(BLOCK_SEPARATOR)
 }
 
 export type RenderRichPostInput = {
