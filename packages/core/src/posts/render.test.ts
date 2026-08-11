@@ -292,6 +292,9 @@ describe("normalizeBlockSpacing", () => {
       [
         "В статье показываю конкретную границу, на которой заканчивается удобство адаптеров.",
         "",
+        // Telegram gives adjacent blocks no margin, so the gap has to be a block.
+        "⠀",
+        "",
         "Это важное различие для продакшена. Подключить базу — только часть задачи.",
       ].join("\n")
     )
@@ -332,9 +335,9 @@ describe("normalizeBlockSpacing", () => {
     expect(normalizeBlockSpacing(written)).toBe(written)
   })
 
-  it("collapses runs of blank lines to exactly one", () => {
+  it("collapses runs of blank lines, leaving one spacer rather than several", () => {
     expect(normalizeBlockSpacing("Первый.\n\n\n\nВторой.")).toBe(
-      "Первый.\n\nВторой."
+      "Первый.\n\n⠀\n\nВторой."
     )
   })
 
@@ -345,6 +348,56 @@ describe("normalizeBlockSpacing", () => {
       source: { name: "n", url: "https://example.com" },
     })
 
-    expect(out).toBe("# Заголовок\n\nПервый абзац.\n\nВторой абзац.")
+    expect(out).toBe("# Заголовок\n\nПервый абзац.\n\n⠀\n\nВторой абзац.")
+  })
+})
+
+describe("paragraph spacers", () => {
+  const SPACER = "⠀"
+
+  /**
+   * Telegram renders adjacent rich blocks flush, so a blank line separates
+   * nothing on screen. Measured against a real client: only a blank glyph and a
+   * visible rule create a gap, and the rule draws a line across the post.
+   */
+  it("puts a blank glyph between two paragraphs", () => {
+    expect(normalizeBlockSpacing("Первый абзац.\n\nВторой абзац.")).toBe(
+      `Первый абзац.\n\n${SPACER}\n\nВторой абзац.`
+    )
+  })
+
+  it("leaves headings alone, which have their own spacing", () => {
+    const out = normalizeBlockSpacing("## Раздел\n\nТекст раздела.")
+
+    expect(out).toBe("## Раздел\n\nТекст раздела.")
+    expect(out).not.toContain(SPACER)
+  })
+
+  it("leaves lists alone", () => {
+    const out = normalizeBlockSpacing("Перед списком:\n\n- один\n- два")
+
+    expect(out).not.toContain(SPACER)
+  })
+
+  it("leaves quotes and tables alone", () => {
+    expect(normalizeBlockSpacing("> цитата\n\n> вторая")).not.toContain(SPACER)
+    expect(normalizeBlockSpacing("| a |\n|---|\n\n| b |")).not.toContain(SPACER)
+  })
+
+  it("does not separate a cover image from the title", () => {
+    const out = renderRichPostMessage({
+      text: "# Заголовок\n\nАбзац.",
+      footerTemplate: "",
+      source: { name: "n", url: "https://example.com" },
+      mediaUrl: "https://example.com/a.jpg",
+    })
+
+    expect(out).toBe("# Заголовок\n\n![](https://example.com/a.jpg)\n\nАбзац.")
+  })
+
+  it("spaces every paragraph in a run, not just the first pair", () => {
+    const out = normalizeBlockSpacing("Один.\n\nДва.\n\nТри.")
+
+    expect(out.split(SPACER)).toHaveLength(3)
   })
 })
