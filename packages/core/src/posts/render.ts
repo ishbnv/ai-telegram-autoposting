@@ -223,6 +223,76 @@ export function truncateMarkdown(value: string, limit: number): string {
   return kept.join(BLOCK_SEPARATOR).trim()
 }
 
+const FENCE_LINE = /^[ \t]*```/
+const LIST_ITEM = /^[ \t]*(?:[-*+][ \t]|\d+\.[ \t])/
+const TABLE_ROW = /^[ \t]*\|/
+const QUOTE_LINE = /^[ \t]*>/
+const HEADING_LINE = /^[ \t]*#{1,6}[ \t]+\S/
+/** A line that finishes a thought, rather than one wrapped mid-sentence. */
+const SENTENCE_END = /[.!?:;…»"'”’)\]][ \t]*$/
+
+/** Two lines of the same kind that a blank line between would break apart. */
+function belongTogether(previous: string, next: string): boolean {
+  return (
+    (LIST_ITEM.test(previous) && LIST_ITEM.test(next)) ||
+    (TABLE_ROW.test(previous) && TABLE_ROW.test(next)) ||
+    (QUOTE_LINE.test(previous) && QUOTE_LINE.test(next))
+  )
+}
+
+/**
+ * Guarantees a blank line between blocks, whatever the model produced.
+ *
+ * Telegram treats a single newline as a line break inside one block and a blank
+ * line as a paragraph boundary, so a draft written with single newlines arrives
+ * as an unbroken wall of text — unreadable on a phone, which is where these
+ * posts are read. Asking the model nicely gets this right most of the time,
+ * and most of the time is not a formatting guarantee.
+ *
+ * Lines that are wrapped mid-sentence are left joined: only a line that ends
+ * like a finished sentence earns a break after it, so a soft-wrapped paragraph
+ * is not exploded into one paragraph per line.
+ */
+export function normalizeBlockSpacing(value: string): string {
+  const lines = value.replaceAll("\r\n", "\n").split("\n")
+  const out: string[] = []
+  let inCode = false
+
+  for (const [index, line] of lines.entries()) {
+    if (FENCE_LINE.test(line)) {
+      inCode = !inCode
+      out.push(line)
+      continue
+    }
+
+    if (inCode) {
+      out.push(line)
+      continue
+    }
+
+    const previous = index > 0 ? (lines[index - 1] ?? "") : ""
+    const needsBlank =
+      line.trim() !== "" &&
+      previous.trim() !== "" &&
+      !belongTogether(previous, line) &&
+      (HEADING_LINE.test(line) ||
+        HEADING_LINE.test(previous) ||
+        LIST_ITEM.test(line) ||
+        SENTENCE_END.test(previous))
+
+    if (needsBlank) {
+      out.push("")
+    }
+
+    out.push(line)
+  }
+
+  return out
+    .join("\n")
+    .replaceAll(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
 export type RenderRichPostInput = {
   /** The model's output, in the Rich Markdown dialect. Not escaped. */
   text: string
@@ -273,7 +343,10 @@ export function renderRichPostMessage(input: RenderRichPostInput): string {
     (footer.trim() ? Array.from(footer).length + BLOCK_SEPARATOR.length : 0) +
     (image ? Array.from(image).length + BLOCK_SEPARATOR.length : 0)
 
-  const body = truncateMarkdown(input.text, Math.max(0, limit - overhead))
+  const body = truncateMarkdown(
+    normalizeBlockSpacing(input.text),
+    Math.max(0, limit - overhead)
+  )
 
   return [withCover(body, image), footer.trim()]
     .filter(Boolean)
