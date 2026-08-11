@@ -28,6 +28,25 @@ describe("password hashing", () => {
     expect(await verifyPassword("same", b)).toBe(true)
   })
 
+  /**
+   * A `$` in the hash is expanded away by Docker Compose, taking the salt and
+   * key with it, so new hashes are colon-separated. base64url contains neither
+   * character, which is what makes both unambiguous as separators.
+   */
+  it("produces a hash with no character a shell would expand", async () => {
+    const hash = await hashPassword("correct horse battery staple")
+
+    expect(hash).not.toContain("$")
+    expect(hash.split(":")).toHaveLength(6)
+  })
+
+  it("still accepts a hash generated before the separator changed", async () => {
+    const legacy = (await hashPassword("legacy secret")).replaceAll(":", "$")
+
+    expect(await verifyPassword("legacy secret", legacy)).toBe(true)
+    expect(await verifyPassword("wrong", legacy)).toBe(false)
+  })
+
   it("rejects malformed stored values instead of throwing", async () => {
     expect(await verifyPassword("x", "")).toBe(false)
     expect(await verifyPassword("x", "not-a-hash")).toBe(false)

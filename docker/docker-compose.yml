@@ -8,6 +8,12 @@ x-app: &app
     context: ..
     dockerfile: docker/Dockerfile
   # Tokens, keys and the admin hash come from the repository-root .env.
+  #
+  # Compose expands `$NAME` inside these values before they reach the
+  # container, so a literal `$` in a secret has to be written `$$` there. The
+  # admin password hash used to be `$`-separated and arrived truncated, which
+  # rejected every login with nothing to explain it; it is colon-separated now,
+  # and the API refuses to start on a hash that does not match that shape.
   env_file: ../.env
   environment: &app-env
     # These override whatever .env says. Inside the network the database is a

@@ -105,9 +105,15 @@ Either way, `.env` needs four values first.
 pnpm --filter @workspace/api hash-password
 ```
 
-Type your password at the prompt. The command prints a `scrypt$…` string — that is
+Type your password at the prompt. The command prints a `scrypt:…` string — that is
 `ADMIN_PASSWORD_HASH`. The password is read from stdin rather than an argument, so it never lands
 in your shell history or in the process list.
+
+Paste it into `.env` unquoted. Values in that file are read by Docker Compose, which strips quotes
+in some places but not others, and expands `$NAME` inside them — which is why the hash is
+separated by colons rather than the `$` these hashes conventionally use. If you have a hash from an
+earlier version it still works, but regenerate it before deploying with Compose. Any secret of your
+own that contains a literal `$` needs it doubled: `pa$$word`.
 
 ### Session secret
 

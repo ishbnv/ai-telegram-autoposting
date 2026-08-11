@@ -36,6 +36,24 @@ const MAX_MEMORY = 64 * 1024 * 1024
 const PREFIX = "scrypt"
 
 /**
+ * Colon rather than the `$` that scrypt and bcrypt strings conventionally use.
+ *
+ * Docker Compose expands `$` inside env-file values, and the salt and key are
+ * base64url — so `scrypt$16384$8$1$c2Fsd...$aGFza...` arrives in the container
+ * as `scrypt$16384$8$1`, the digits surviving only because a variable name
+ * cannot start with one. `verifyPassword` then sees four parts instead of six
+ * and rejects every password, with nothing anywhere to explain why.
+ *
+ * Neither `:` nor anything else outside `[A-Za-z0-9_-]` appears in base64url,
+ * so a colon-joined hash is inert in Compose, in a shell, and in anything else
+ * that performs variable expansion. `$` is still accepted when verifying, so
+ * hashes generated before this change keep working.
+ */
+const SEPARATOR = ":"
+/** Matches either separator: base64url contains neither, so this is unambiguous. */
+const SEPARATOR_PATTERN = /[:$]/
+
+/**
  * scrypt from the standard library rather than argon2: one admin password does
  * not justify a native dependency that has to be rebuilt for every base image.
  */
@@ -55,14 +73,14 @@ export async function hashPassword(password: string): Promise<string> {
     PARALLELISM,
     salt.toString("base64url"),
     key.toString("base64url"),
-  ].join("$")
+  ].join(SEPARATOR)
 }
 
 export async function verifyPassword(
   password: string,
   stored: string
 ): Promise<boolean> {
-  const parts = stored.split("$")
+  const parts = stored.split(SEPARATOR_PATTERN)
   if (parts.length !== 6 || parts[0] !== PREFIX) {
     return false
   }
