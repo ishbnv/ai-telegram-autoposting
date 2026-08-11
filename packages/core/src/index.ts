@@ -88,6 +88,7 @@ export {
 export {
   extractLinks,
   renderLinkAppendix,
+  renderSourceNote,
   type ExtractedLink,
 } from "./posts/links"
 

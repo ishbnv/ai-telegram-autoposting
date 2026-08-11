@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { extractLinks, renderLinkAppendix } from "./links"
+import { extractLinks, renderLinkAppendix, renderSourceNote } from "./links"
 
 describe("extractLinks", () => {
   it("finds an ordinary Markdown link", () => {
@@ -105,5 +105,26 @@ describe("renderLinkAppendix", () => {
     ])
 
     expect(appendix).not.toContain("`](")
+  })
+})
+
+describe("renderSourceNote", () => {
+  it("shows the name and the full URL, the URL uncliackable", () => {
+    const note = renderSourceNote({
+      name: "Блог ishbnv.dev",
+      url: "https://ishbnv.dev/ru/blog/prisma-turso-migracii/",
+    })
+
+    expect(note).toContain("Блог ishbnv.dev")
+    expect(note).toContain(
+      "`https://ishbnv.dev/ru/blog/prisma-turso-migracii/`"
+    )
+    expect(note).not.toContain("](")
+  })
+
+  it("neutralises a backtick in either half", () => {
+    const note = renderSourceNote({ name: "a`b", url: "https://x/`y" })
+
+    expect(note.split("`")).toHaveLength(3)
   })
 })

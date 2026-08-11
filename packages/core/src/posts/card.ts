@@ -1,6 +1,6 @@
 import { TelegramApiError, type TelegramClient } from "../telegram/client"
 import { buildModerationKeyboard } from "../telegram/markup"
-import { extractLinks, renderLinkAppendix } from "./links"
+import { extractLinks, renderLinkAppendix, renderSourceNote } from "./links"
 import {
   renderPostCaption,
   renderPostMessage,
@@ -60,24 +60,36 @@ export function renderCardBody(
 
 /**
  * The rich body of a card: the post exactly as it will appear in the channel,
- * followed by the list of link targets it contains.
+ * then a rule, then everything a moderator needs and a reader never sees.
  *
- * The appendix is the whole reason a moderator can still do their job here. In
+ * That second half is the whole reason a moderator can still do their job. In
  * the plain path the model's output is escaped and therefore inert; rendered,
  * a link shows its label and hides its destination, and the label is the part
  * an injected instruction gets to choose.
  */
 export function renderRichCardBody(post: CardPost, target: CardTarget): string {
+  const source = { name: post.sourceName, url: post.sourceUrl }
+
   const body = renderRichPostMessage({
     text: post.text,
     footerTemplate: target.footerTemplate,
-    source: { name: post.sourceName, url: post.sourceUrl },
+    source,
     mediaUrl: post.mediaUrl,
   })
 
-  const appendix = renderLinkAppendix(extractLinks(body))
+  /**
+   * Everything a moderator needs and a reader never sees, below a rule. The
+   * source belongs here unconditionally: whether it is credited in the channel
+   * is the operator's decision, expressed through the footer template and the
+   * prompt, but approving a draft without knowing where it came from is not a
+   * decision anyone should be asked to make.
+   */
+  const notes = [
+    renderSourceNote(source),
+    renderLinkAppendix(extractLinks(body)),
+  ].filter(Boolean)
 
-  return appendix ? `${body}\n\n---\n\n${appendix}` : body
+  return `${body}\n\n---\n\n${notes.join("\n\n")}`
 }
 
 export type SendCardOptions = {

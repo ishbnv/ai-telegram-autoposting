@@ -12,9 +12,15 @@ import type { WorkerContext } from "@/context"
 
 export const publishPostPayload = z.object({ postId: z.string().min(1) })
 
+/**
+ * `hourCycle` is pinned because the locale is not: inside a container
+ * `undefined` resolves to en-US, which stamps a Russian channel's cards with
+ * "08:59 PM". The zone still comes from TZ, so that has to be right in .env.
+ */
 const time = new Intl.DateTimeFormat(undefined, {
   hour: "2-digit",
   minute: "2-digit",
+  hourCycle: "h23",
 })
 
 export async function handlePublishPost(
