@@ -26,6 +26,33 @@ RSS / your site / Reddit
                  your channel
 ```
 
+## Screenshots
+
+The admin panel, running against example data.
+
+![The Overview dashboard: live process indicators, counters for published and pending posts, LLM
+spend, and the list of collected items](docs/images/overview.png)
+
+<details>
+<summary>Sources, pipelines and the prompt editor</summary>
+
+Sources of all three kinds, with the last fetch and any error kept in view:
+
+![The Sources page listing an RSS feed, a subreddit and a scraped HTML page, one of them paused
+after a 404](docs/images/sources.png)
+
+Pipelines bind sources to a prompt and a channel on a cron schedule:
+
+![The Pipelines page, each row showing its source count, cron expression and last
+run](docs/images/pipelines.png)
+
+The prompt editor picks a model from the live OpenRouter catalogue and shows what it costs:
+
+![The prompt editor with the system prompt on the left and model, temperature, token limit and
+user template on the right](docs/images/prompt-editor.png)
+
+</details>
+
 ## Features
 
 - **Sources** — RSS/Atom, plain HTML pages via CSS selectors, and Reddit. Deduplicated per source.
