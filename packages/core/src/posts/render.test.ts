@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   escapeHtml,
+  normalizeBlockSpacing,
   renderFooter,
   renderPostCaption,
   renderRichPostMessage,
@@ -277,5 +278,73 @@ describe("cover image placement", () => {
     })
 
     expect(out.startsWith("![](")).toBe(true)
+  })
+})
+
+describe("normalizeBlockSpacing", () => {
+  it("separates paragraphs the model ran together", () => {
+    const written = [
+      "В статье показываю конкретную границу, на которой заканчивается удобство адаптеров.",
+      "Это важное различие для продакшена. Подключить базу — только часть задачи.",
+    ].join("\n")
+
+    expect(normalizeBlockSpacing(written)).toBe(
+      [
+        "В статье показываю конкретную границу, на которой заканчивается удобство адаптеров.",
+        "",
+        "Это важное различие для продакшена. Подключить базу — только часть задачи.",
+      ].join("\n")
+    )
+  })
+
+  it("keeps list items together", () => {
+    const written = "Что ломается:\n- первое;\n- второе;\n- третье."
+
+    expect(normalizeBlockSpacing(written)).toBe(
+      "Что ломается:\n\n- первое;\n- второе;\n- третье."
+    )
+  })
+
+  it("keeps table rows together", () => {
+    const written = "| a | b |\n|---|---|\n| 1 | 2 |"
+
+    expect(normalizeBlockSpacing(written)).toBe(written)
+  })
+
+  it("gives a heading room on both sides", () => {
+    const written = "Вступление.\n## Раздел\nТекст раздела."
+
+    expect(normalizeBlockSpacing(written)).toBe(
+      "Вступление.\n\n## Раздел\n\nТекст раздела."
+    )
+  })
+
+  /** Splitting these would turn one paragraph into several. */
+  it("leaves a line wrapped mid-sentence joined to the next", () => {
+    const written = "Одно предложение, разорванное\nпереносом посередине."
+
+    expect(normalizeBlockSpacing(written)).toBe(written)
+  })
+
+  it("does not touch the inside of a fenced block", () => {
+    const written = "Текст.\n\n```ts\nconst a = 1\nconst b = 2\n```"
+
+    expect(normalizeBlockSpacing(written)).toBe(written)
+  })
+
+  it("collapses runs of blank lines to exactly one", () => {
+    expect(normalizeBlockSpacing("Первый.\n\n\n\nВторой.")).toBe(
+      "Первый.\n\nВторой."
+    )
+  })
+
+  it("is applied by the renderer, not just available to it", () => {
+    const out = renderRichPostMessage({
+      text: "# Заголовок\nПервый абзац.\nВторой абзац.",
+      footerTemplate: "",
+      source: { name: "n", url: "https://example.com" },
+    })
+
+    expect(out).toBe("# Заголовок\n\nПервый абзац.\n\nВторой абзац.")
   })
 })

@@ -72,6 +72,7 @@ export {
 export {
   escapeHtml,
   renderFooter,
+  normalizeBlockSpacing,
   renderFooterMarkdown,
   renderPostCaption,
   renderPostMessage,
