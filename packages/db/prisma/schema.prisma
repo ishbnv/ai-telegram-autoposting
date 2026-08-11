@@ -178,6 +178,11 @@ model Post {
   /// Where the moderation card lives, so the bot can edit it in place.
   moderationChatId    BigInt?
   moderationMessageId Int?
+  /// Whether that card went out as a rich message. An edit has to use the same
+  /// shape as the send — `editMessageText` carries either `text` or
+  /// `rich_message`, never both — and the bot edits cards from a different
+  /// process than the one that sent them, so the choice cannot be recomputed.
+  richCard            Boolean  @default(false)
 
   publishedAt DateTime?
   error       String?

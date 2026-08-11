@@ -1,6 +1,7 @@
 import {
   HttpError,
   renderCardBody,
+  renderRichPostMessage,
   TelegramApiError,
   updateModerationCard,
 } from "@core"
@@ -165,9 +166,42 @@ export async function handlePublishPost(
  */
 async function send(
   ctx: WorkerContext,
-  post: { mediaUrl: string | null; channel: { tgChatId: bigint } },
+  post: {
+    mediaUrl: string | null
+    text: string
+    sourceName: string
+    sourceUrl: string
+    channel: { tgChatId: bigint; footerTemplate: string }
+  },
   body: string
 ): Promise<{ message_id: number }> {
+  /**
+   * Rich first, so the channel gets the formatting the draft was written with.
+   * Only a 4xx falls through: that is Telegram refusing this particular
+   * message, where the plain path is a genuine alternative. A 5xx or a timeout
+   * must keep throwing, because the message may well have landed and retrying
+   * it in another shape would publish it twice.
+   */
+  try {
+    return await ctx.telegram.sendRichMessage(post.channel.tgChatId, {
+      markdown: renderRichPostMessage({
+        text: post.text,
+        footerTemplate: post.channel.footerTemplate,
+        source: { name: post.sourceName, url: post.sourceUrl },
+        mediaUrl: post.mediaUrl,
+      }),
+    })
+  } catch (error) {
+    if (!(error instanceof TelegramApiError) || !refusedOutright(error)) {
+      throw error
+    }
+
+    ctx.logger.warn(
+      { err: error.message },
+      "channel refused the rich message, publishing as plain text"
+    )
+  }
+
   if (!post.mediaUrl) {
     return ctx.telegram.sendMessage(post.channel.tgChatId, body)
   }

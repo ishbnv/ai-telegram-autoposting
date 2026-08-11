@@ -85,6 +85,15 @@ function envelope<T extends z.ZodType>(result: T) {
   ])
 }
 
+function richMessagePayload(
+  content: InputRichMessage
+): Record<string, unknown> {
+  return {
+    markdown: content.markdown,
+    skip_entity_detection: content.skipEntityDetection,
+  }
+}
+
 export class TelegramApiError extends Error {
   override readonly name = "TelegramApiError"
 
@@ -97,6 +106,20 @@ export class TelegramApiError extends Error {
       `Telegram ${method} failed (${errorCode ?? "no code"}): ${description}`
     )
   }
+}
+
+/**
+ * Content for `sendRichMessage`. The Bot API is explicit that "exactly one of
+ * the fields html, markdown, or blocks must be used", so this is a union rather
+ * than an object with three optional fields — passing two is a 400.
+ *
+ * Only the Markdown arm is modelled: the renderer produces Markdown, and the
+ * block form would mean building a tree to say the same thing.
+ */
+export type InputRichMessage = {
+  markdown: string
+  /** Suppresses Telegram's own linkification of bare URLs, emails and handles. */
+  skipEntityDetection?: boolean
 }
 
 export type SendMessageOptions = {
@@ -174,6 +197,52 @@ export class TelegramClient {
         reply_markup: options.replyMarkup,
       },
       messageSchema
+    )
+  }
+
+  /**
+   * Bot API 10.1. Separate from `sendMessage`, which was not extended: rich
+   * content travels in its own parameter and `parse_mode` does not apply to it.
+   */
+  async sendRichMessage(
+    chatId: bigint | number,
+    content: InputRichMessage,
+    options: Pick<
+      SendMessageOptions,
+      "replyMarkup" | "disableNotification" | "replyToMessageId"
+    > = {}
+  ): Promise<TelegramMessage> {
+    return this.call(
+      "sendRichMessage",
+      {
+        chat_id: chatId.toString(),
+        rich_message: richMessagePayload(content),
+        disable_notification: options.disableNotification,
+        reply_parameters: options.replyToMessageId
+          ? { message_id: options.replyToMessageId }
+          : undefined,
+        reply_markup: options.replyMarkup,
+      },
+      messageSchema
+    )
+  }
+
+  /** The rich counterpart of `editMessageText`, which is the same method. */
+  async editRichMessage(
+    chatId: bigint | number,
+    messageId: number,
+    content: InputRichMessage,
+    options: Pick<SendMessageOptions, "replyMarkup"> = {}
+  ): Promise<void> {
+    await this.call(
+      "editMessageText",
+      {
+        chat_id: chatId.toString(),
+        message_id: messageId,
+        rich_message: richMessagePayload(content),
+        reply_markup: options.replyMarkup,
+      },
+      z.unknown()
     )
   }
 

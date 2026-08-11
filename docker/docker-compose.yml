@@ -3,6 +3,17 @@ name: ai-telegram-autoposting
 # One image, four services. `docker compose up -d postgres` on its own is still
 # the development setup; the rest only come up when you ask for them.
 
+# Two different sources of values, and mixing them up is a quiet way to lose an
+# afternoon:
+#
+#   - `env_file: ../.env` below is read at container start. Everything the
+#     applications themselves parse lives there: tokens, keys, the admin hash.
+#   - `${VAR}` in this file is substituted by Compose before any container
+#     exists, and Compose looks for those in the shell or in `docker/.env` —
+#     next to this file, NOT the repository-root .env. POSTGRES_USER,
+#     POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT, API_PORT and the two BIND
+#     variables are of this kind. Setting POSTGRES_PASSWORD in the root .env
+#     changes nothing; the database keeps the default below.
 x-app: &app
   build:
     context: ..
@@ -21,6 +32,13 @@ x-app: &app
     # otherwise put the containers in development mode.
     NODE_ENV: production
     DATABASE_URL: postgresql://${POSTGRES_USER:-autoposting}:${POSTGRES_PASSWORD:-autoposting}@postgres:5432/${POSTGRES_DB:-autoposting}?schema=public
+    # Pinned, so API_PORT in the root .env cannot desync the two halves of the
+    # port mapping: it is passed through env_file and would change the port the
+    # app listens on inside the container, while the mapping below still
+    # published container port 3000 and nothing answered. API_PORT now only
+    # picks the host port — see the note on ${POSTGRES_*} below for where
+    # Compose reads it from.
+    API_PORT: 3000
   restart: unless-stopped
 
 services:
@@ -31,8 +49,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-autoposting}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autoposting}
       POSTGRES_DB: ${POSTGRES_DB:-autoposting}
+    # Loopback only. The other services reach Postgres over the compose network
+    # and never need this; it is published so psql and Prisma Studio work from
+    # the host. On a server with a public address, 0.0.0.0 here would put the
+    # database on the internet behind whatever POSTGRES_PASSWORD defaults to.
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -62,8 +84,14 @@ services:
       <<: *app-env
       # Resolved from the api's working directory inside the image.
       WEB_DIST_DIR: ../web/dist
+    # Loopback only. The session cookie carries `Secure` in production, so the
+    # panel is unusable over plain HTTP anyway — but published on 0.0.0.0 it
+    # would still answer on http://<server-ip>:3000, handing out the login form
+    # and every API response outside the TLS a reverse proxy terminates. Set
+    # API_BIND=0.0.0.0 to expose it directly, which only makes sense when
+    # nothing else is in front.
     ports:
-      - "${API_PORT:-3000}:3000"
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy

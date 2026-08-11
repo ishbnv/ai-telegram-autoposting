@@ -51,6 +51,7 @@ export {
 
 export {
   renderCardBody,
+  renderRichCardBody,
   sendModerationCard,
   updateModerationCard,
   type CardPost,
@@ -62,6 +63,7 @@ export {
 export {
   applyTemplate,
   buildMessages,
+  FORMATTING_GUIDE,
   SOURCE_MATERIAL_TAG,
   UNTRUSTED_CONTENT_GUARD,
   type BuildMessagesInput,
@@ -70,12 +72,23 @@ export {
 export {
   escapeHtml,
   renderFooter,
+  renderFooterMarkdown,
   renderPostCaption,
   renderPostMessage,
+  renderRichPostMessage,
+  stripMarkdown,
+  TELEGRAM_RICH_MESSAGE_LIMIT,
   truncate,
+  truncateMarkdown,
   type PostSource,
   type RenderPostInput,
+  type RenderRichPostInput,
 } from "./posts/render"
+export {
+  extractLinks,
+  renderLinkAppendix,
+  type ExtractedLink,
+} from "./posts/links"
 
 export * from "./sources/index"
 
