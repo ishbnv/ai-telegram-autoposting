@@ -42,6 +42,13 @@ export type PlacedCard = {
    * every one of those calls targets the wrong method and fails.
    */
   usedPhoto: boolean
+  /**
+   * Whether the image survived into what was actually sent. False when Telegram
+   * refused it and the message went out without it — the caller must then clear
+   * `mediaUrl`, or the publish that follows will offer the same dead URL again
+   * and be refused the same way.
+   */
+  mediaKept: boolean
 }
 
 export function renderCardBody(
@@ -127,15 +134,49 @@ export async function sendModerationCard(
       messageId: message.message_id,
       usedPhoto: false,
       isRich: true,
+      mediaKept: Boolean(post.mediaUrl),
     }
   } catch (error) {
     if (!(error instanceof TelegramApiError)) {
       throw error
     }
 
-    // A chat that cannot take rich messages, or a draft Telegram would not
-    // parse. Neither is worth losing the post over.
-    options.onRichRejected?.(error)
+    /**
+     * Telegram fetches the image itself and refuses the whole message when it
+     * cannot — `RICH_MESSAGE_PHOTO_NO_MEDIA_FOUND` for a URL that 404s. Falling
+     * straight through to the plain card would throw away the headings, lists
+     * and links over one dead thumbnail, so the article is offered once more
+     * without it. Only then does the plain path get a turn.
+     */
+    if (post.mediaUrl) {
+      try {
+        const message = await telegram.sendRichMessage(
+          chatId,
+          { markdown: renderRichCardBody({ ...post, mediaUrl: null }, target) },
+          { replyMarkup }
+        )
+
+        options.onPhotoRejected?.(error)
+
+        return {
+          chatId,
+          messageId: message.message_id,
+          usedPhoto: false,
+          isRich: true,
+          mediaKept: false,
+        }
+      } catch (retryError) {
+        if (!(retryError instanceof TelegramApiError)) {
+          throw retryError
+        }
+
+        options.onRichRejected?.(retryError)
+      }
+    } else {
+      // A chat that cannot take rich messages, or a draft Telegram would not
+      // parse. Neither is worth losing the post over.
+      options.onRichRejected?.(error)
+    }
   }
 
   if (post.mediaUrl) {
@@ -152,6 +193,7 @@ export async function sendModerationCard(
         messageId: message.message_id,
         usedPhoto: true,
         isRich: false,
+        mediaKept: true,
       }
     } catch (error) {
       // Telegram fetches the image itself and rejects anything it cannot read.
@@ -175,6 +217,7 @@ export async function sendModerationCard(
     messageId: message.message_id,
     usedPhoto: false,
     isRich: false,
+    mediaKept: false,
   }
 }
 
