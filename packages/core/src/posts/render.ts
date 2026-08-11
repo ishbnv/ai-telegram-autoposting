@@ -309,7 +309,7 @@ export function normalizeBlockSpacing(value: string): string {
  * block holding nothing else. This is a printable glyph that happens to be
  * blank, so it survives and occupies a line.
  */
-const PARAGRAPH_SPACER = "⠀"
+export const PARAGRAPH_SPACER = "⠀"
 
 const BLOCK_WITH_OWN_SPACING =
   /^[ \t]*(?:#{1,6}[ \t]|[-*+][ \t]|\d+\.[ \t]|>|\||!\[|```|(?:-{3,}|\*{3,}|_{3,})[ \t]*$)/

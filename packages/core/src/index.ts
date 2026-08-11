@@ -76,6 +76,7 @@ export {
   renderFooterMarkdown,
   renderPostCaption,
   renderPostMessage,
+  PARAGRAPH_SPACER,
   renderRichPostMessage,
   stripMarkdown,
   TELEGRAM_RICH_MESSAGE_LIMIT,

@@ -2,6 +2,7 @@ import { TelegramApiError, type TelegramClient } from "../telegram/client"
 import { buildModerationKeyboard } from "../telegram/markup"
 import { extractLinks, renderLinkAppendix, renderSourceNote } from "./links"
 import {
+  PARAGRAPH_SPACER,
   renderPostCaption,
   renderPostMessage,
   renderRichPostMessage,
@@ -51,6 +52,9 @@ export type PlacedCard = {
   mediaKept: boolean
 }
 
+/** A blank line separates blocks in the source; this separates them on screen. */
+const BLOCK_GAP = `\n\n${PARAGRAPH_SPACER}\n\n`
+
 export function renderCardBody(
   post: CardPost,
   target: CardTarget,
@@ -96,7 +100,11 @@ export function renderRichCardBody(post: CardPost, target: CardTarget): string {
     renderLinkAppendix(extractLinks(body)),
   ].filter(Boolean)
 
-  return `${body}\n\n---\n\n${notes.join("\n\n")}`
+  // Spacer-joined, not blank-line-joined: these are adjacent blocks like any
+  // others, and Telegram renders adjacent blocks flush. The body gets this
+  // treatment inside the renderer; the notes are assembled after it, so they
+  // have to ask for it themselves.
+  return `${body}\n\n---\n\n${notes.join(BLOCK_GAP)}`
 }
 
 export type SendCardOptions = {
@@ -251,7 +259,7 @@ export async function updateModerationCard(
     await telegram.editRichMessage(
       post.moderationChatId,
       post.moderationMessageId,
-      { markdown: note ? `${rich}\n\n${note}` : rich },
+      { markdown: note ? `${rich}${BLOCK_GAP}${note}` : rich },
       options
     )
 
