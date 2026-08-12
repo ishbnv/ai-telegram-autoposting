@@ -7,6 +7,8 @@ export {
   openRouterEnvShape,
   optionalEnv,
   parseEnv,
+  redditCredentials,
+  redditEnvShape,
   telegramEnvShape,
 } from "./env"
 export { createLogger, type CreateLoggerOptions, type Logger } from "./logger"

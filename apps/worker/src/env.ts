@@ -2,6 +2,7 @@ import {
   baseEnvShape,
   databaseEnvShape,
   openRouterEnvShape,
+  redditEnvShape,
   parseEnv,
   telegramEnvShape,
 } from "@config"
@@ -18,6 +19,7 @@ export function loadWorkerEnv() {
     ...databaseEnvShape,
     ...telegramEnvShape,
     ...openRouterEnvShape,
+    ...redditEnvShape,
   })
 }
 

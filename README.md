@@ -144,9 +144,18 @@ Two things that catch people out:
   `-100400123456` — and drafts silently stop arriving. Make the group a supergroup first (Settings →
   Chat history for new members → Visible), then read its id.
 
-The channel id is found the same way: make the bot an administrator of the channel, post anything,
-forward that post to the bot in a direct message, and read `forward_from_chat.id` from `getUpdates`.
-That value goes into the **Channels** page in the panel, not into `.env`.
+The channel id goes into the **Channels** page in the panel, not into `.env`. For a public channel
+one request is enough:
+
+```bash
+curl -s "https://api.telegram.org/bot<YOUR_TOKEN>/getChat?chat_id=@yourchannel" | python3 -m json.tool
+```
+
+For a private one, make the bot an administrator, post anything, forward that post to the bot in a
+direct message, and read `forward_origin.chat.id` from `getUpdates` — `forward_from_chat` is what
+older guides name, and although the API still returns it, it is no longer in the documentation.
+Stop the bot first (`docker compose -f docker/docker-compose.yml stop bot`): it long-polls, and it
+will consume the update before your `curl` sees it.
 
 ## Putting it on a server
 
@@ -176,6 +185,23 @@ and fetches a file over port 80, so it fails if DNS has not caught up yet. Renew
 To expose the API directly instead, with nothing in front, set `API_BIND=0.0.0.0` — and arrange
 TLS some other way, or you will not be able to log in.
 
+### Reddit sources
+
+Reddit stopped serving its `.json` endpoints to unauthenticated clients — they answer `403` from
+any server — so a Reddit source needs credentials of its own:
+
+1. Open <https://www.reddit.com/prefs/apps> and choose **create another app**.
+2. Pick type **script**. The redirect URI is unused; `http://localhost` is fine.
+3. Copy the id shown under the app name into `REDDIT_CLIENT_ID`, and the value next to **secret**
+   into `REDDIT_CLIENT_SECRET`.
+
+Set both or neither: one without the other cannot authenticate, and the worker refuses to start on
+half a credential rather than letting it look like Reddit blocking the request.
+
+Without credentials a subreddit can still be followed as an **RSS** source pointed at
+`https://www.reddit.com/r/<name>/new/.rss`, which needs no app. That feed carries the title, link,
+author and body, but no images, no score, and none of the stickied or NSFW filters.
+
 ## Configuration
 
 All configuration is read from the environment — see [`.env.example`](.env.example) for the full
@@ -187,6 +213,8 @@ list. Secrets are never stored in the database and never shown in the UI.
 | `TELEGRAM_BOT_TOKEN`          | Bot token from @BotFather                      |
 | `TELEGRAM_MODERATION_CHAT_ID` | Default chat that receives drafts for approval |
 | `OPENROUTER_API_KEY`          | OpenRouter API key                             |
+| `REDDIT_CLIENT_ID`            | Reddit app id, only for Reddit sources         |
+| `REDDIT_CLIENT_SECRET`        | Reddit app secret, only for Reddit sources     |
 | `ADMIN_PASSWORD_HASH`         | scrypt hash of your admin panel password       |
 | `SESSION_SECRET`              | Random string signing the session cookie       |
 

@@ -59,6 +59,17 @@ export const openRouterEnvShape = {
 const ADMIN_PASSWORD_HASH_PATTERN =
   /^scrypt([:$])\d+\1\d+\1\d+\1[\w-]+\1[\w-]+$/
 
+/**
+ * Reddit's public endpoints answer 403 now, so a Reddit source needs an app of
+ * its own. Optional: a deployment with no Reddit sources should not be made to
+ * register one. `redditCredentials` below is what enforces that the two halves
+ * arrive together — a shape cannot express a rule spanning two of its fields.
+ */
+export const redditEnvShape = {
+  REDDIT_CLIENT_ID: optionalEnv(z.string().min(1)),
+  REDDIT_CLIENT_SECRET: optionalEnv(z.string().min(1)),
+}
+
 export const apiEnvShape = {
   API_PORT: z.coerce.number().int().positive().max(65535).default(3000),
   ADMIN_PASSWORD_HASH: z
@@ -117,4 +128,30 @@ export function loadEnvFile(path: string): void {
       throw error
     }
   }
+}
+
+/**
+ * The pair, or nothing. Half a credential is always a mistake — a typo'd
+ * variable name, a value that never made it into the env file — and it is worth
+ * refusing at boot rather than turning into a 403 at the next fetch, where it
+ * looks exactly like Reddit blocking the request.
+ */
+export function redditCredentials(env: {
+  REDDIT_CLIENT_ID?: string | undefined
+  REDDIT_CLIENT_SECRET?: string | undefined
+}): { clientId: string; clientSecret: string } | undefined {
+  const id = env.REDDIT_CLIENT_ID
+  const secret = env.REDDIT_CLIENT_SECRET
+
+  if (id && secret) {
+    return { clientId: id, clientSecret: secret }
+  }
+
+  if (id || secret) {
+    throw new EnvironmentError(
+      "REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET must be set together: one without the other cannot authenticate."
+    )
+  }
+
+  return undefined
 }

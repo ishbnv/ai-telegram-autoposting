@@ -1,7 +1,7 @@
 import { hostname } from "node:os"
 import { fileURLToPath } from "node:url"
 
-import { createLogger, loadEnvFile } from "@config"
+import { createLogger, loadEnvFile, redditCredentials } from "@config"
 import { JobQueue, OpenRouterClient, TelegramClient } from "@core"
 import { createPrismaClient, resolveProxyUrl } from "@db"
 
@@ -34,6 +34,9 @@ const [llmProxyUrl, telegramProxyUrl] = await Promise.all([
 
 const ctx: WorkerContext = {
   prisma,
+  // Resolved here so a half-configured credential stops the worker at boot
+  // rather than looking like Reddit blocking us at the next fetch.
+  reddit: redditCredentials(env),
   queue: new JobQueue(prisma, `worker:${instanceId}`),
   telegram: new TelegramClient({
     token: env.TELEGRAM_BOT_TOKEN,

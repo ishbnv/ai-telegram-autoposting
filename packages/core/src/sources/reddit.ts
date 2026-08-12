@@ -1,8 +1,13 @@
 import { redditSourceConfigSchema, type RedditSourceConfig } from "@contracts"
 import { z } from "zod"
 
-import { fetchJson } from "../http/fetch"
+import { fetchJson, HttpError } from "../http/fetch"
 import { decodeEntities } from "./text"
+import {
+  forgetRedditToken,
+  redditAccessToken,
+  REDDIT_OAUTH_ROOT,
+} from "./redditAuth"
 import { requestOptions } from "./request"
 import {
   SourceConfigError,
@@ -45,12 +50,24 @@ const listingSchema = z.object({
   }),
 })
 
+/**
+ * Reddit serves the same listing on two hosts. `www` wants `.json` on the path
+ * and answers 403 to anything unauthenticated; `oauth` takes a bearer token and
+ * no suffix. The subreddit path is carried over from whichever URL the operator
+ * typed, so both forms of source URL keep working.
+ */
 export function buildListingUrl(
   sourceUrl: string,
-  config: RedditSourceConfig
+  config: RedditSourceConfig,
+  authenticated = false
 ): string {
   const base = sourceUrl.replace(/\/+$/, "")
-  const url = new URL(`${base}/${config.listing}.json`)
+  const url = authenticated
+    ? new URL(
+        `${new URL(base).pathname.replace(/\/+$/, "")}/${config.listing}`,
+        REDDIT_OAUTH_ROOT
+      )
+    : new URL(`${base}/${config.listing}.json`)
   url.searchParams.set("limit", String(config.limit))
 
   if (config.listing === "top" && config.timeframe) {
@@ -111,11 +128,53 @@ export const redditAdapter: SourceAdapter = {
       )
     }
 
-    const listing = await fetchJson(
-      buildListingUrl(context.url, parsed.data),
-      listingSchema,
-      { headers: { "user-agent": USER_AGENT, accept: "application/json" } },
-      requestOptions(context)
+    const options = requestOptions(context)
+    const credentials = context.reddit
+
+    /**
+     * Authenticated when credentials exist, and only then. Reddit's public
+     * `.json` endpoints answer 403 now, so the unauthenticated path is kept
+     * for nothing but a clear failure and for anyone reaching a mirror.
+     */
+    const token = credentials
+      ? await redditAccessToken(credentials, { request: options })
+      : null
+
+    const request = {
+      headers: {
+        "user-agent": USER_AGENT,
+        accept: "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+    }
+
+    const url = buildListingUrl(context.url, parsed.data, token !== null)
+
+    const listing = await fetchJson(url, listingSchema, request, options).catch(
+      async (error: unknown) => {
+        /**
+         * A token can be revoked or expire early, and the cached one would
+         * then fail every fetch until the process restarts. One retry with a
+         * fresh token costs a request; not doing it costs the source.
+         */
+        if (credentials && error instanceof HttpError && error.status === 401) {
+          forgetRedditToken(credentials.clientId)
+          const retry = await redditAccessToken(credentials, {
+            request: options,
+          })
+
+          return fetchJson(
+            url,
+            listingSchema,
+            {
+              headers: { ...request.headers, authorization: `Bearer ${retry}` },
+            },
+            options
+          )
+        }
+
+        throw error
+      }
     )
 
     return mapListing(listing, parsed.data)
