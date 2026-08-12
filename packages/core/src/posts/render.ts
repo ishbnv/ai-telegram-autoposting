@@ -322,21 +322,26 @@ function needsSpacer(block: string): boolean {
   return block.trim() !== "" && !BLOCK_WITH_OWN_SPACING.test(block)
 }
 
+/**
+ * Follows every paragraph with a spacer, except the last one in the message.
+ *
+ * The earlier rule only spaced a paragraph from another paragraph, which left a
+ * heading pressed against the text above it — the one place a reader most needs
+ * the break, because a heading is where a new idea starts. What decides the
+ * spacer is now the block being left, not the one being entered: prose gets
+ * air after it, and headings, lists, quotes, tables and rules still get none of
+ * their own, since Telegram already sets them apart.
+ */
 function addParagraphSpacers(value: string): string {
   const blocks = value.split(BLOCK_SEPARATOR)
-  const out: string[] = []
 
-  for (const [index, block] of blocks.entries()) {
-    const previous = index > 0 ? (blocks[index - 1] ?? "") : ""
-
-    if (index > 0 && needsSpacer(previous) && needsSpacer(block)) {
-      out.push(PARAGRAPH_SPACER)
-    }
-
-    out.push(block)
-  }
-
-  return out.join(BLOCK_SEPARATOR)
+  return blocks
+    .flatMap((block, index) =>
+      needsSpacer(block) && index < blocks.length - 1
+        ? [block, PARAGRAPH_SPACER]
+        : [block]
+    )
+    .join(BLOCK_SEPARATOR)
 }
 
 export type RenderRichPostInput = {

@@ -304,7 +304,7 @@ describe("normalizeBlockSpacing", () => {
     const written = "Что ломается:\n- первое;\n- второе;\n- третье."
 
     expect(normalizeBlockSpacing(written)).toBe(
-      "Что ломается:\n\n- первое;\n- второе;\n- третье."
+      "Что ломается:\n\n⠀\n\n- первое;\n- второе;\n- третье."
     )
   })
 
@@ -318,7 +318,7 @@ describe("normalizeBlockSpacing", () => {
     const written = "Вступление.\n## Раздел\nТекст раздела."
 
     expect(normalizeBlockSpacing(written)).toBe(
-      "Вступление.\n\n## Раздел\n\nТекст раздела."
+      "Вступление.\n\n⠀\n\n## Раздел\n\nТекст раздела."
     )
   })
 
@@ -332,7 +332,10 @@ describe("normalizeBlockSpacing", () => {
   it("does not touch the inside of a fenced block", () => {
     const written = "Текст.\n\n```ts\nconst a = 1\nconst b = 2\n```"
 
-    expect(normalizeBlockSpacing(written)).toBe(written)
+    // The paragraph above it is spaced off; the block itself is untouched.
+    expect(normalizeBlockSpacing(written)).toBe(
+      "Текст.\n\n⠀\n\n```ts\nconst a = 1\nconst b = 2\n```"
+    )
   })
 
   it("collapses runs of blank lines, leaving one spacer rather than several", () => {
@@ -366,17 +369,26 @@ describe("paragraph spacers", () => {
     )
   })
 
-  it("leaves headings alone, which have their own spacing", () => {
-    const out = normalizeBlockSpacing("## Раздел\n\nТекст раздела.")
-
-    expect(out).toBe("## Раздел\n\nТекст раздела.")
-    expect(out).not.toContain(SPACER)
+  it("adds nothing after a heading — the gap belongs above it", () => {
+    expect(normalizeBlockSpacing("## Раздел\n\nТекст раздела.")).toBe(
+      "## Раздел\n\nТекст раздела."
+    )
   })
 
-  it("leaves lists alone", () => {
+  it("gives a heading air above it, where a new idea starts", () => {
+    expect(normalizeBlockSpacing("Абзац.\n\n## Раздел")).toBe(
+      `Абзац.\n\n${SPACER}\n\n## Раздел`
+    )
+  })
+
+  it("never leaves a spacer dangling at the end", () => {
+    expect(normalizeBlockSpacing("Один.\n\nДва.").endsWith("Два.")).toBe(true)
+  })
+
+  it("never breaks a list apart, though the text above it is spaced off", () => {
     const out = normalizeBlockSpacing("Перед списком:\n\n- один\n- два")
 
-    expect(out).not.toContain(SPACER)
+    expect(out).toBe(`Перед списком:\n\n${SPACER}\n\n- один\n- два`)
   })
 
   it("leaves quotes and tables alone", () => {
