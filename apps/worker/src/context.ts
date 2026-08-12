@@ -11,4 +11,6 @@ export type WorkerContext = {
   llm: OpenRouterClient
   logger: Logger
   env: WorkerEnv
+  /** Application-only Reddit OAuth, resolved once at boot. */
+  reddit: { clientId: string; clientSecret: string } | undefined
 }

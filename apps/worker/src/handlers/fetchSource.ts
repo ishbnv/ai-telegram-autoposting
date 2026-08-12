@@ -36,6 +36,7 @@ export async function handleFetchSource(
       url: source.url,
       config: source.config,
       ...(proxyUrl ? { proxyUrl } : {}),
+      ...(ctx.reddit ? { reddit: ctx.reddit } : {}),
     })
 
     const rows: Prisma.NewsItemCreateManyInput[] = items

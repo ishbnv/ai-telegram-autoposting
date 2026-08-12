@@ -19,6 +19,12 @@ export type SourceFetchContext = {
   config: unknown
   proxyUrl?: string
   signal?: AbortSignal
+  /**
+   * Application-only OAuth for Reddit, from the environment. Absent when the
+   * operator has not registered an app, in which case the adapter falls back to
+   * the public endpoints Reddit no longer serves — and says so plainly.
+   */
+  reddit?: { clientId: string; clientSecret: string }
 }
 
 export interface SourceAdapter {
