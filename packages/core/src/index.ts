@@ -39,6 +39,9 @@ export {
 } from "./telegram/client"
 export {
   buildModerationKeyboard,
+  buildScheduledKeyboard,
+  buildScheduleKeyboard,
+  PRESET_BY_ACTION,
   CallbackDataTooLongError,
   CALLBACK_DATA_MAX_BYTES,
   decodeCallbackData,
@@ -60,6 +63,13 @@ export {
   type PlacedPost,
   type SendCardOptions,
 } from "./posts/card"
+export {
+  describeMoment,
+  describePreset,
+  resolveSchedule,
+  SCHEDULE_PRESETS,
+  type SchedulePreset,
+} from "./posts/schedule"
 export {
   applyTemplate,
   buildMessages,

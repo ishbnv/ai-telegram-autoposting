@@ -179,6 +179,7 @@ export function toPostDto(
     sourceUrl: post.sourceUrl,
     moderationMessageId: post.moderationMessageId,
     publishedAt: iso(post.publishedAt),
+    scheduledFor: iso(post.scheduledFor),
     error: post.error,
     costUsd: post.llmCalls.reduce(
       (sum, call) => sum + decimal(call.costUsd),

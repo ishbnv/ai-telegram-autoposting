@@ -185,6 +185,10 @@ model Post {
   richCard            Boolean  @default(false)
 
   publishedAt DateTime?
+  /// When a moderator asked for this to go out, if they did not want it now.
+  /// The delay itself lives on the queued job's `runAt`; this is what the card
+  /// and the panel show, and what tells a cancelled schedule from a fresh post.
+  scheduledFor DateTime?
   error       String?
 
   createdAt DateTime @default(now())

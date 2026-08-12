@@ -1,7 +1,14 @@
 import {
   decodeCallbackData,
+  buildModerationKeyboard,
+  buildScheduledKeyboard,
+  buildScheduleKeyboard,
+  describeMoment,
+  PRESET_BY_ACTION,
+  resolveSchedule,
   updateModerationCard,
   type ModerationAction,
+  type SchedulePreset,
   type TelegramCallbackQuery,
 } from "@core"
 import type { Channel, Post, PostStatus } from "@db"
@@ -24,7 +31,29 @@ const PROMPT_DRAFT_LIMIT = 2_000
  * publish handler re-checks the status when it claims, so a post moved out of
  * APPROVED is skipped rather than sent.
  */
-const ALLOWED_FROM: Record<ModerationAction, PostStatus[]> = {
+/**
+ * The actions that move a post from one status to another. The scheduling
+ * buttons are deliberately not among them: opening the picker only swaps the
+ * keyboard, and scheduling and cancelling have their own conditional writes
+ * further down. Keeping them out of this table means the compiler will not let
+ * one be routed through `transition` by accident.
+ */
+const TRANSITION_ACTIONS = [
+  "publish",
+  "reject",
+  "regenerate",
+  "edit",
+] as const satisfies readonly ModerationAction[]
+
+type TransitionAction = (typeof TRANSITION_ACTIONS)[number]
+
+function isTransitionAction(
+  action: ModerationAction
+): action is TransitionAction {
+  return (TRANSITION_ACTIONS as readonly ModerationAction[]).includes(action)
+}
+
+const ALLOWED_FROM: Record<TransitionAction, PostStatus[]> = {
   publish: ["PENDING_APPROVAL"],
   reject: ["PENDING_APPROVAL", "APPROVED", "FAILED"],
   regenerate: ["PENDING_APPROVAL", "APPROVED", "FAILED"],
@@ -94,6 +123,46 @@ export async function handleCallback(
     return
   }
 
+  // Opening and closing the time picker only swaps the buttons — no status
+  // moves, so these run before the transition guard below.
+  if (payload.action === "schedule" || payload.action === "scheduleBack") {
+    if (post.status !== "PENDING_APPROVAL") {
+      await answer("Already handled")
+      return
+    }
+
+    await ctx.telegram.editMessageReplyMarkup(
+      chatId,
+      query.message?.message_id ?? 0,
+      payload.action === "schedule"
+        ? buildScheduleKeyboard(post.id, new Date())
+        : buildModerationKeyboard(post.id)
+    )
+    await answer(payload.action === "schedule" ? "Pick a time" : "")
+    return
+  }
+
+  const preset = PRESET_BY_ACTION.get(payload.action)
+  if (preset) {
+    await schedulePost(ctx, post, preset)
+    await answer("Scheduled")
+    return
+  }
+
+  if (payload.action === "unschedule") {
+    const undone = await cancelSchedule(ctx, post)
+    await answer(undone ? "Schedule cancelled" : "Too late — already sent")
+    return
+  }
+
+  if (!isTransitionAction(payload.action)) {
+    // Every remaining action was handled above; this is here so a new one
+    // cannot slip through as a silent no-op.
+    ctx.logger.warn({ action: payload.action }, "unhandled moderation action")
+    await answer("Unsupported action")
+    return
+  }
+
   const moved = await transition(ctx, post.id, payload.action)
 
   if (!moved) {
@@ -128,6 +197,87 @@ export async function handleCallback(
   await answer("Regenerating")
 }
 
+/**
+ * Approves the post and queues its publication for later. The delay is the
+ * job's `runAt`; nothing polls, and the worker will not touch the job before
+ * then. The dedupe key is what makes the schedule cancellable — it gives the
+ * one row to delete — and it also stops a second tap queueing a second send.
+ */
+async function schedulePost(
+  ctx: BotContext,
+  post: LoadedPost,
+  preset: SchedulePreset
+): Promise<void> {
+  const now = new Date()
+  const at = resolveSchedule(preset, now)
+
+  const { count } = await ctx.prisma.post.updateMany({
+    where: { id: post.id, status: "PENDING_APPROVAL" },
+    data: { status: "APPROVED", scheduledFor: at },
+  })
+
+  if (count === 0) {
+    return
+  }
+
+  await ctx.queue.enqueue({
+    type: "PUBLISH_POST",
+    payload: { postId: post.id },
+    runAt: at,
+    dedupeKey: publishKey(post.id),
+  })
+
+  await updateModerationCard(
+    ctx.telegram,
+    post,
+    post.channel,
+    `⏰ Scheduled for ${describeMoment(at, now)}`,
+    buildScheduledKeyboard(post.id)
+  )
+}
+
+/**
+ * Undoes a schedule, provided the worker has not started on it.
+ *
+ * The job row is deleted under `status: "PENDING"`, so a job already claimed —
+ * or already run — survives and the post still goes out. Cancelling has to be
+ * the thing that loses that race: the alternative is a post that a moderator
+ * believes was called back sitting in the channel.
+ */
+async function cancelSchedule(
+  ctx: BotContext,
+  post: LoadedPost
+): Promise<boolean> {
+  const { count } = await ctx.prisma.job.deleteMany({
+    where: { dedupeKey: publishKey(post.id), status: "PENDING" },
+  })
+
+  if (count === 0) {
+    return false
+  }
+
+  const released = await ctx.prisma.post.updateMany({
+    where: { id: post.id, status: "APPROVED" },
+    data: { status: "PENDING_APPROVAL", scheduledFor: null },
+  })
+
+  if (released.count === 0) {
+    return false
+  }
+
+  await updateModerationCard(
+    ctx.telegram,
+    post,
+    post.channel,
+    undefined,
+    buildModerationKeyboard(post.id)
+  )
+
+  return true
+}
+
+const publishKey = (postId: string) => `publish:${postId}`
+
 type LoadedPost = Post & { channel: Channel }
 
 /**
@@ -137,7 +287,7 @@ type LoadedPost = Post & { channel: Channel }
 async function transition(
   ctx: BotContext,
   postId: string,
-  action: Exclude<ModerationAction, "edit">
+  action: Exclude<TransitionAction, "edit">
 ): Promise<boolean> {
   const to: PostStatus =
     action === "publish"

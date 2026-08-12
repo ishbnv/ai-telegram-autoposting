@@ -1,5 +1,8 @@
 import { TelegramApiError, type TelegramClient } from "../telegram/client"
-import { buildModerationKeyboard } from "../telegram/markup"
+import {
+  buildModerationKeyboard,
+  type InlineKeyboardMarkup,
+} from "../telegram/markup"
 import { extractLinks, renderLinkAppendix, renderSourceNote } from "./links"
 import {
   PARAGRAPH_SPACER,
@@ -245,13 +248,22 @@ export async function updateModerationCard(
   telegram: TelegramClient,
   post: PlacedPost,
   target: CardTarget,
-  note?: string
+  note?: string,
+  /**
+   * Overrides what the card is left with. Without one the rule stays as it
+   * was: a note closes the card and no note redraws it with the full set —
+   * which is wrong for a schedule, where the note has to coexist with the
+   * button that undoes it.
+   */
+  keyboard?: InlineKeyboardMarkup
 ): Promise<boolean> {
   if (post.moderationChatId === null || post.moderationMessageId === null) {
     return false
   }
 
-  const options = note ? {} : { replyMarkup: buildModerationKeyboard(post.id) }
+  const replyMarkup =
+    keyboard ?? (note ? undefined : buildModerationKeyboard(post.id))
+  const options = replyMarkup ? { replyMarkup } : {}
 
   if (post.richCard) {
     const rich = renderRichCardBody(post, target)
