@@ -1,3 +1,9 @@
+import {
+  describePreset,
+  SCHEDULE_PRESETS,
+  type SchedulePreset,
+} from "../posts/schedule"
+
 /**
  * Telegram caps callback_data at 64 bytes, so the encoding is deliberately terse.
  * The version prefix means a bot rolled out mid-flight can still recognise, and
@@ -12,6 +18,17 @@ export const MODERATION_ACTIONS = [
   "edit",
   "regenerate",
   "reject",
+  // Scheduling. Each preset is its own action rather than a parameter: the
+  // payload is fixed at four colon-separated parts, and the version field
+  // exists so an older bot declines cards it cannot read — bumping it to carry
+  // one extra field would invalidate every card already in a chat.
+  "schedule",
+  "scheduleIn1h",
+  "scheduleIn3h",
+  "scheduleEvening",
+  "scheduleMorning",
+  "unschedule",
+  "scheduleBack",
 ] as const
 
 export type ModerationAction = (typeof MODERATION_ACTIONS)[number]
@@ -21,6 +38,13 @@ const ACTION_CODES = {
   edit: "edt",
   regenerate: "reg",
   reject: "rej",
+  schedule: "sch",
+  scheduleIn1h: "s1h",
+  scheduleIn3h: "s3h",
+  scheduleEvening: "sev",
+  scheduleMorning: "smo",
+  unschedule: "uns",
+  scheduleBack: "bak",
 } as const satisfies Record<ModerationAction, string>
 
 const CODE_TO_ACTION = new Map<string, ModerationAction>(
@@ -90,6 +114,55 @@ export function buildModerationKeyboard(postId: string): InlineKeyboardMarkup {
       [
         { text: "✏️ Edit", callback_data: encode("edit", postId) },
         { text: "♻️ Regenerate", callback_data: encode("regenerate", postId) },
+      ],
+      [{ text: "⏰ Schedule", callback_data: encode("schedule", postId) }],
+    ],
+  }
+}
+
+const PRESET_ACTIONS = {
+  in1h: "scheduleIn1h",
+  in3h: "scheduleIn3h",
+  evening: "scheduleEvening",
+  morning: "scheduleMorning",
+} as const satisfies Record<SchedulePreset, ModerationAction>
+
+export const PRESET_BY_ACTION = new Map<ModerationAction, SchedulePreset>(
+  SCHEDULE_PRESETS.map((preset) => [PRESET_ACTIONS[preset], preset])
+)
+
+/**
+ * Replaces the moderation buttons while a time is being picked. Labels are
+ * resolved against `now` so none of them can promise the wrong day.
+ */
+export function buildScheduleKeyboard(
+  postId: string,
+  now: Date
+): InlineKeyboardMarkup {
+  const rows = SCHEDULE_PRESETS.map((preset) => [
+    {
+      text: describePreset(preset, now),
+      callback_data: encode(PRESET_ACTIONS[preset], postId),
+    },
+  ])
+
+  return {
+    inline_keyboard: [
+      ...rows,
+      [{ text: "← Back", callback_data: encode("scheduleBack", postId) }],
+    ],
+  }
+}
+
+/** The single button a scheduled card keeps, so the plan can be undone. */
+export function buildScheduledKeyboard(postId: string): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "✖ Cancel schedule",
+          callback_data: encode("unschedule", postId),
+        },
       ],
     ],
   }

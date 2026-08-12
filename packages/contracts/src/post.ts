@@ -45,6 +45,8 @@ export type PostDto = {
   sourceUrl: string
   moderationMessageId: number | null
   publishedAt: string | null
+  /** Set while a post waits for a time a moderator picked. */
+  scheduledFor: string | null
   error: string | null
   costUsd: number
   createdAt: string

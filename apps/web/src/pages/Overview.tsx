@@ -399,9 +399,18 @@ function PostsTable() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant={statusVariant(post.status)}>
-                    {post.status.replace("_", " ").toLowerCase()}
-                  </Badge>
+                  <div className={styles.stack}>
+                    <Badge variant={statusVariant(post.status)}>
+                      {post.status.replace("_", " ").toLowerCase()}
+                    </Badge>
+                    {/* "approved" alone does not say a moderator picked a
+                        time — without this the queue is invisible here. */}
+                    {post.scheduledFor ? (
+                      <span className={styles.subtle}>
+                        ⏰ {formatDateTime(post.scheduledFor)}
+                      </span>
+                    ) : null}
+                  </div>
                 </TableCell>
                 <TableCell>{post.channelTitle}</TableCell>
                 <TableCell>{formatUsd(post.costUsd)}</TableCell>
