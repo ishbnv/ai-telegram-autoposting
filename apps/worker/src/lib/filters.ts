@@ -6,9 +6,19 @@ import type { PipelineFilters } from "@contracts"
  * support burden the moment a pipeline silently stops matching.
  */
 export function matchesFilters(
-  item: { title: string; summary?: string | null },
+  item: { title: string; summary?: string | null; content?: string | null },
   filters: PipelineFilters
 ): boolean {
+  /**
+   * Length is measured on the body alone, never the title. A long headline over
+   * an empty post is exactly the case this is meant to drop, and counting the
+   * title would let it through.
+   */
+  const body = (item.content ?? item.summary ?? "").trim()
+  if (filters.minContentLength > 0 && body.length < filters.minContentLength) {
+    return false
+  }
+
   const haystack = `${item.title} ${item.summary ?? ""}`.toLowerCase()
 
   const excluded = filters.exclude.some((term) =>
@@ -33,5 +43,9 @@ export function readFilters(value: unknown): PipelineFilters {
   return {
     include: Array.isArray(raw.include) ? raw.include : [],
     exclude: Array.isArray(raw.exclude) ? raw.exclude : [],
+    minContentLength:
+      typeof raw.minContentLength === "number" && raw.minContentLength > 0
+        ? raw.minContentLength
+        : 0,
   }
 }

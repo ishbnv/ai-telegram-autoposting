@@ -99,6 +99,8 @@ export function toPipelineDto(
     filters: {
       include: filters.include ?? [],
       exclude: filters.exclude ?? [],
+      // Absent on every pipeline saved before the field existed.
+      minContentLength: filters.minContentLength ?? 0,
     },
     cron: pipeline.cron,
     maxPostsPerDay: pipeline.maxPostsPerDay,

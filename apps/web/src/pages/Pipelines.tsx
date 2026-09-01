@@ -41,6 +41,7 @@ type Draft = {
   cron: string
   include: string
   exclude: string
+  minContentLength: number
   maxPostsPerDay: number
   freshnessWindowHours: number
   isActive: boolean
@@ -54,6 +55,7 @@ const emptyDraft: Draft = {
   cron: "*/30 * * * *",
   include: "",
   exclude: "",
+  minContentLength: 0,
   maxPostsPerDay: 10,
   freshnessWindowHours: 48,
   isActive: true,
@@ -100,6 +102,7 @@ export function PipelinesPage() {
       cron: pipeline.cron,
       include: pipeline.filters.include.join(", "),
       exclude: pipeline.filters.exclude.join(", "),
+      minContentLength: pipeline.filters.minContentLength,
       maxPostsPerDay: pipeline.maxPostsPerDay,
       freshnessWindowHours: pipeline.freshnessWindowHours,
       isActive: pipeline.isActive,
@@ -117,6 +120,7 @@ export function PipelinesPage() {
       filters: {
         include: splitList(draft.include),
         exclude: splitList(draft.exclude),
+        minContentLength: draft.minContentLength,
       },
       maxPostsPerDay: draft.maxPostsPerDay,
       freshnessWindowHours: draft.freshnessWindowHours,
@@ -351,6 +355,25 @@ export function PipelinesPage() {
             value={draft.exclude}
             onChange={(event) =>
               setDraft({ ...draft, exclude: event.target.value })
+            }
+          />
+        </Field>
+
+        <Field
+          label="Minimum text length"
+          htmlFor="minContentLength"
+          hint="Characters of body text an item must have to be worth generating from. 0 disables it. Around 300 drops link-only posts and one-line questions, which cost a generation and get rejected anyway."
+        >
+          <Input
+            id="minContentLength"
+            type="number"
+            min={0}
+            value={draft.minContentLength}
+            onChange={(event) =>
+              setDraft({
+                ...draft,
+                minContentLength: Number(event.target.value),
+              })
             }
           />
         </Field>
