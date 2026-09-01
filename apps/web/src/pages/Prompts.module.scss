@@ -1,5 +1,6 @@
-// The model list is the one place where a select option carries two lines of
-// information, so it needs its own layout rather than the default single row.
+// The model list carries two lines per option — a name over its price — where
+// every other select carries one. Wrapping itself is the component's default;
+// what lives here is the two-line stacking and the spacing that needs.
 
 .modelItem {
   padding-top: $space-2;
@@ -17,7 +18,6 @@
   min-width: 0;
   flex-direction: column;
   gap: $space-1;
-  white-space: normal;
 }
 
 .modelName {

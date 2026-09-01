@@ -196,7 +196,7 @@ export function OverviewPage() {
             <SelectTrigger>
               <SelectValue placeholder="All sources" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className={styles.filterPopup}>
               <SelectItem value={ALL}>All sources</SelectItem>
               {sources.items.map((source) => (
                 <SelectItem key={source.id} value={source.id}>
@@ -225,7 +225,7 @@ export function OverviewPage() {
             <SelectTrigger>
               <SelectValue placeholder="Any status" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className={styles.filterPopup}>
               <SelectItem value={ALL}>Any status</SelectItem>
               {POST_STATUSES.map((status) => (
                 <SelectItem key={status} value={status}>

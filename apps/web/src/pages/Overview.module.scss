@@ -75,6 +75,21 @@
   width: min(352px, 100%);
 }
 
+// A select fills its container now, which is right inside a form field and
+// wrong in a row of filters — there it would stretch across the page. Stated
+// once for the row rather than per control, so a filter added later is right
+// by default instead of stretching until someone notices.
+.toolbar :global([data-slot="select-trigger"]) {
+  width: min(224px, 100%);
+}
+
+// The popup takes its width from the trigger, so capping the trigger would cap
+// the option list with it and wrap source names that used to fit on one line.
+// Same escape hatch the model list uses.
+.filterPopup {
+  min-width: 288px;
+}
+
 .title {
   display: flex;
   // Keeps a long headline or post body from widening the table past the viewport.
