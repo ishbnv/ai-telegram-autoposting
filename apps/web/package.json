@@ -4,12 +4,13 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint",
+    "dev": "vite",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "typecheck": "tsc --noEmit",
-    "preview": "vite preview"
+    "lint": "eslint",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@workspace/contracts": "workspace:*",
@@ -35,6 +36,7 @@
     "sass": "^1.97.1",
     "typescript": "~6",
     "typescript-eslint": "^8",
-    "vite": "^8"
+    "vite": "^8",
+    "vitest": "^4"
   }
 }
