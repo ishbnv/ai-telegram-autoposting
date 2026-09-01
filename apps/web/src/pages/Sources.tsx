@@ -31,17 +31,12 @@ const TYPES: { value: SourceTypeValue; label: string; hint: string }[] = [
   {
     value: "RSS",
     label: "RSS / Atom",
-    hint: "Feed URL, including your own site.",
+    hint: "Feed URL — your own site, or a subreddit as https://www.reddit.com/r/NAME/new/.rss",
   },
   {
     value: "HTML",
     label: "HTML page",
     hint: "Scrape a page with CSS selectors.",
-  },
-  {
-    value: "REDDIT",
-    label: "Reddit",
-    hint: "Subreddit URL, e.g. https://www.reddit.com/r/GeminiAI",
   },
 ]
 
@@ -56,10 +51,6 @@ type Draft = {
   linkSelector: string
   summarySelector: string
   imageSelector: string
-  listing: "new" | "hot" | "top" | "rising"
-  limit: number
-  includeStickied: boolean
-  includeNsfw: boolean
 }
 
 const emptyDraft: Draft = {
@@ -73,10 +64,6 @@ const emptyDraft: Draft = {
   linkSelector: "",
   summarySelector: "",
   imageSelector: "",
-  listing: "new",
-  limit: 25,
-  includeStickied: false,
-  includeNsfw: false,
 }
 
 function toPayload(draft: Draft): CreateSourceInput {
@@ -103,19 +90,6 @@ function toPayload(draft: Draft): CreateSourceInput {
           ? { summarySelector: draft.summarySelector }
           : {}),
         ...(draft.imageSelector ? { imageSelector: draft.imageSelector } : {}),
-      },
-    }
-  }
-
-  if (draft.type === "REDDIT") {
-    return {
-      ...base,
-      type: "REDDIT",
-      config: {
-        listing: draft.listing,
-        limit: draft.limit,
-        includeStickied: draft.includeStickied,
-        includeNsfw: draft.includeNsfw,
       },
     }
   }
@@ -156,10 +130,6 @@ export function SourcesPage() {
       linkSelector: String(config["linkSelector"] ?? ""),
       summarySelector: String(config["summarySelector"] ?? ""),
       imageSelector: String(config["imageSelector"] ?? ""),
-      listing: (config["listing"] as Draft["listing"]) ?? "new",
-      limit: Number(config["limit"] ?? 25),
-      includeStickied: Boolean(config["includeStickied"]),
-      includeNsfw: Boolean(config["includeNsfw"]),
     })
     setOpen(true)
   }
@@ -396,65 +366,6 @@ export function SourcesPage() {
                 }
               />
             </Field>
-          </>
-        ) : null}
-
-        {draft.type === "REDDIT" ? (
-          <>
-            <Field label="Listing">
-              <Select
-                value={draft.listing}
-                onValueChange={(value) =>
-                  setDraft({ ...draft, listing: value as Draft["listing"] })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(["new", "hot", "top", "rising"] as const).map((listing) => (
-                    <SelectItem key={listing} value={listing}>
-                      {listing}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            <Field label="Posts per fetch" htmlFor="limit">
-              <Input
-                id="limit"
-                type="number"
-                min={1}
-                max={100}
-                value={draft.limit}
-                onChange={(event) =>
-                  setDraft({ ...draft, limit: Number(event.target.value) })
-                }
-              />
-            </Field>
-
-            <div className={styles.checkboxRow}>
-              <Switch
-                id="includeStickied"
-                checked={draft.includeStickied}
-                onCheckedChange={(checked) =>
-                  setDraft({ ...draft, includeStickied: checked })
-                }
-              />
-              <label htmlFor="includeStickied">Include stickied posts</label>
-            </div>
-
-            <div className={styles.checkboxRow}>
-              <Switch
-                id="includeNsfw"
-                checked={draft.includeNsfw}
-                onCheckedChange={(checked) =>
-                  setDraft({ ...draft, includeNsfw: checked })
-                }
-              />
-              <label htmlFor="includeNsfw">Include NSFW posts</label>
-            </div>
           </>
         ) : null}
 
