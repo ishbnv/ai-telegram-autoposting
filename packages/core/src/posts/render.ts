@@ -311,15 +311,17 @@ export function normalizeBlockSpacing(value: string): string {
  */
 export const PARAGRAPH_SPACER = "⠀"
 
-const BLOCK_WITH_OWN_SPACING =
-  /^[ \t]*(?:#{1,6}[ \t]|[-*+][ \t]|\d+\.[ \t]|>|\||!\[|```|(?:-{3,}|\*{3,}|_{3,})[ \t]*$)/
-
 /**
- * Headings, lists, quotes, tables, images and rules already stand apart on
- * screen, so a spacer beside one is wasted height. Only prose needs the help.
+ * A heading is the one block Telegram gives room of its own, and the only place
+ * a spacer is unwanted: the title should sit tight against the paragraph under
+ * it. Everything else — prose, lists, quotes, tables, code — renders flush
+ * against whatever follows, so the gap has to be supplied.
  */
-function needsSpacer(block: string): boolean {
-  return block.trim() !== "" && !BLOCK_WITH_OWN_SPACING.test(block)
+const HEADING_BLOCK = /^[ \t]*#{1,6}[ \t]+\S/
+
+/** Whether a gap belongs after this block, given what it is. */
+function spacerFollows(block: string): boolean {
+  return block.trim() !== "" && !HEADING_BLOCK.test(block)
 }
 
 /**
@@ -337,7 +339,7 @@ function addParagraphSpacers(value: string): string {
 
   return blocks
     .flatMap((block, index) =>
-      needsSpacer(block) && index < blocks.length - 1
+      spacerFollows(block) && index < blocks.length - 1
         ? [block, PARAGRAPH_SPACER]
         : [block]
     )

@@ -391,9 +391,41 @@ describe("paragraph spacers", () => {
     expect(out).toBe(`Перед списком:\n\n${SPACER}\n\n- один\n- два`)
   })
 
-  it("leaves quotes and tables alone", () => {
-    expect(normalizeBlockSpacing("> цитата\n\n> вторая")).not.toContain(SPACER)
-    expect(normalizeBlockSpacing("| a |\n|---|\n\n| b |")).not.toContain(SPACER)
+  /**
+   * The heading is the only exemption. Quotes and tables look like they stand
+   * apart because each is a box of its own, but Telegram gives them no margin
+   * either — two of them in a row touch exactly like two paragraphs do.
+   */
+  it("separates quotes and tables like anything else", () => {
+    expect(normalizeBlockSpacing("> цитата\n\n> вторая")).toContain(SPACER)
+    expect(normalizeBlockSpacing("| a |\n|---|\n\n| b |")).toContain(SPACER)
+  })
+
+  /**
+   * The bug this rule was rewritten for. The old version decided from the
+   * block before the gap alone, so a list — which "has its own spacing" —
+   * suppressed the spacer that belonged after it, and the paragraph following
+   * a list ran straight into the last bullet.
+   */
+  it("puts a gap after a list, not only before it", () => {
+    const out = normalizeBlockSpacing(
+      "Рядом должны быть:\n\n- какой лимит затронут;\n- когда он сбросится;\n\nОбъяснения нет нигде."
+    )
+
+    expect(out).toBe(
+      [
+        "Рядом должны быть:",
+        "",
+        SPACER,
+        "",
+        "- какой лимит затронут;",
+        "- когда он сбросится;",
+        "",
+        SPACER,
+        "",
+        "Объяснения нет нигде.",
+      ].join("\n")
+    )
   })
 
   it("does not separate a cover image from the title", () => {
