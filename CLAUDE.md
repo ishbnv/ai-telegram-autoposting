@@ -39,6 +39,15 @@ pnpm db:migrate   # apply Prisma migrations
   `packages/ui`. Do not hand-write or fork them; the project is pinned to the `base-rhea` style on
   Base UI primitives. Re-export each new one from `packages/ui/src/components/index.ts` — the CLI
   does not update that barrel.
+- A generated component may carry **local deltas** where the generated output is wrong for this
+  project, under three conditions. The alternative — every call site repeating the same override —
+  spreads one decision across the app and still leaves the default broken.
+  1. Each delta is listed in a `DELIBERATE DEVIATIONS` block at the top of the file, saying what
+     changed and what breaks without it.
+  2. Each delta is asserted by a test, so re-running the CLI fails the build instead of silently
+     reverting it. See `packages/ui/src/components/select.deltas.test.ts`.
+  3. The delta is a change to what the component already does — a class, a default. Anything
+     structural belongs in a wrapper of our own, not in the vendored file.
 - Import through the short aliases, not through relative ladders or full package names:
   `@ui` (component barrel), `@ui/lib/utils`, `@/…` for app-local files, and `@db` / `@core` /
   `@contracts` / `@config` / `@api` for the other workspaces. They are declared in each consumer's
