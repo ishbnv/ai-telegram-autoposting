@@ -102,3 +102,33 @@ describe("parseFeed (malformed input)", () => {
     expect(parseFeed("")).toEqual([])
   })
 })
+
+describe("atom media thumbnails", () => {
+  /** Shape taken from a real reddit /new/.rss response. */
+  const feed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <entry>
+    <title>A link post</title>
+    <id>t3_abc123</id>
+    <link href="https://www.reddit.com/r/x/comments/abc123/a_link_post/" />
+    <media:thumbnail url="https://preview.redd.it/abc.png?width=640&amp;s=sig" />
+    <updated>2026-09-01T12:00:03+00:00</updated>
+  </entry>
+  <entry>
+    <title>A text post</title>
+    <id>t3_def456</id>
+    <link href="https://www.reddit.com/r/x/comments/def456/a_text_post/" />
+    <updated>2026-09-01T11:00:03+00:00</updated>
+  </entry>
+</feed>`
+
+  it("reads the image an Atom entry offers through Media RSS", () => {
+    const [withImage, withoutImage] = parseFeed(feed)
+
+    expect(withImage?.imageUrl).toBe(
+      "https://preview.redd.it/abc.png?width=640&s=sig"
+    )
+    // A text post has no thumbnail, and must not borrow the previous one.
+    expect(withoutImage?.imageUrl).toBeUndefined()
+  })
+})

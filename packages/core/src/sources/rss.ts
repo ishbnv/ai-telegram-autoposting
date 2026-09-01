@@ -112,6 +112,7 @@ function mapAtomEntry(raw: unknown, baseUrl?: string): FetchedItem | undefined {
       summary: summary ? stripHtml(summary) : undefined,
       content: content ? stripHtml(content) : undefined,
       author: asText(asRecord(entry["author"])?.["name"]),
+      imageUrl: mediaImage(entry, baseUrl),
       publishedAt: parseDate(
         asText(entry["published"]) ?? asText(entry["updated"])
       ),
@@ -133,6 +134,22 @@ function atomLink(raw: unknown): string | undefined {
   return attribute(chosen, "href") ?? asText(chosen)
 }
 
+/**
+ * The Media RSS extension, which both dialects carry. Atom has no element of
+ * its own for an image, so a feed that wants to offer one — Reddit's does, on
+ * every link and image post — reaches for these.
+ */
+function mediaImage(
+  item: Record<string, unknown>,
+  baseUrl?: string
+): string | undefined {
+  const candidate =
+    attribute(asList(item["media:content"])[0], "url") ??
+    attribute(asList(item["media:thumbnail"])[0], "url")
+
+  return resolve(candidate, baseUrl)
+}
+
 function rssImage(
   item: Record<string, unknown>,
   baseUrl?: string
@@ -142,10 +159,7 @@ function rssImage(
     return type === undefined || type.startsWith("image/")
   })
 
-  const candidate =
-    attribute(enclosure, "url") ??
-    attribute(asList(item["media:content"])[0], "url") ??
-    attribute(asList(item["media:thumbnail"])[0], "url")
+  const candidate = attribute(enclosure, "url") ?? mediaImage(item, baseUrl)
 
   return resolve(candidate, baseUrl)
 }
