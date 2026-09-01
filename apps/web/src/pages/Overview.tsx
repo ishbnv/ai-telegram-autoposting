@@ -193,7 +193,7 @@ export function OverviewPage() {
               feed.setSourceId(value === ALL ? undefined : String(value))
             }
           >
-            <SelectTrigger>
+            <SelectTrigger className={styles.filterSelect}>
               <SelectValue placeholder="All sources" />
             </SelectTrigger>
             <SelectContent>
@@ -222,7 +222,7 @@ export function OverviewPage() {
               )
             }
           >
-            <SelectTrigger>
+            <SelectTrigger className={styles.filterSelect}>
               <SelectValue placeholder="Any status" />
             </SelectTrigger>
             <SelectContent>

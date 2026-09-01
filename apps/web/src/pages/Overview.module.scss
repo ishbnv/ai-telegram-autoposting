@@ -75,6 +75,13 @@
   width: min(352px, 100%);
 }
 
+// A select fills its container now, which is right inside a form field and
+// wrong in a row of filters — there it would stretch across the page. These
+// two get a width of their own, in the same shape as the search box above.
+.filterSelect {
+  width: min(224px, 100%);
+}
+
 .title {
   display: flex;
   // Keeps a long headline or post body from widening the table past the viewport.

@@ -293,7 +293,7 @@ export function PromptsPage() {
                     setDraft({ ...draft, model: String(value) })
                   }
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger>
                     <SelectValue placeholder="Pick a model" />
                   </SelectTrigger>
                   <SelectContent className={promptStyles.modelPopup}>
